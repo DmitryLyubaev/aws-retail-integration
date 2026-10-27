@@ -58,7 +58,15 @@ Official action tags resolved through their GitHub repository API on 27 October:
 | aws-actions/configure-aws-credentials v5 | 61815dcd50bd041e203e49132bacad1fd04d2708 |
 | hashicorp/setup-terraform v3             | b9cd54a3c349d3f38e8881555d616ced269862dd |
 
-Not run: hosted CI, real AWS plan/apply, identity/OIDC setup, Free plan topology
+At the dated local verification above, hosted CI had not run. Current hosted results
+are available in [Offline verification](https://github.com/DmitryLyubaev/aws-retail-integration/actions/workflows/ci.yml).
+The first hosted run passed 103 application tests but failed when host Terraform
+could not write into root-owned container results. The CI override now runs tooling
+as the checkout UID/GID and supplies the Docker socket group for the image test.
+Private artifact modes remain unchanged. An isolated Linux ownership probe reproduced
+the root-writer permission failure and passed with the checkout-owner writer.
+
+Not run: real AWS plan/apply, identity/OIDC setup, Free plan topology
 availability, ECS/RDS/SQS/CloudWatch acceptance, actual charges or verified teardown.
 Workflow files, mocks and an account registration do not establish those results.
 

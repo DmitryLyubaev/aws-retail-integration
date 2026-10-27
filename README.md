@@ -1,5 +1,7 @@
 # AWS retail integration
 
+[![Offline verification](https://github.com/DmitryLyubaev/aws-retail-integration/actions/workflows/ci.yml/badge.svg)](https://github.com/DmitryLyubaev/aws-retail-integration/actions/workflows/ci.yml)
+
 A bounded synthetic portfolio demonstration: a completed POS sale reaches a
 simulated accounting receiver once as a durable business effect, despite duplicate
 submissions, retries and selected process crashes.
@@ -90,7 +92,7 @@ and [verification record](docs/verification.md).
 ## AWS status and scope
 
 Terraform and delivery/cleanup definitions are verified offline with mocked
-providers. Hosted CI, AWS deployment, service access on the account's plan,
+providers. Hosted offline CI results are linked above. AWS deployment, service access on the account's plan,
 CloudWatch acceptance, actual charges and teardown remain unverified.
 [The AWS runbook](docs/runbook-aws.md) contains the separate owner approval gates.
 There is no automatic paid deployment or public publication.

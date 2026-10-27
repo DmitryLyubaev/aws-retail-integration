@@ -10,6 +10,8 @@ jobs:
   offline:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      COMPOSE_FILE: compose.yaml:compose.ci.yaml
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -21,6 +23,8 @@ jobs:
         with:
           terraform_version: 1.15.8
           terraform_wrapper: false
+      - name: Match tooling files to the checkout owner
+        run: printf 'P14_HOST_UID=%s\nP14_HOST_GID=%s\nP14_DOCKER_GID=%s\n' "$(id -u)" "$(id -g)" "$(stat -c %g /var/run/docker.sock)" >> "$GITHUB_ENV"
       - name: Build tooling and run application checks
         run: |
           docker compose --profile test build --pull tooling
@@ -31,7 +35,7 @@ jobs:
       - name: Build and smoke the actual runtime image
         run: |
           docker build --target runtime --build-arg "SOURCE_COMMIT=$GITHUB_SHA" -t p14-runtime:offline .
-          docker compose -f compose.yaml -f compose.image.yaml --profile test run --rm tooling npm run test:one -- tests/integration/image.test.ts
+          docker compose -f compose.yaml -f compose.image.yaml -f compose.ci.yaml --profile test run --rm tooling npm run test:one -- tests/integration/image.test.ts
       - name: Run declared acceptance and measured report
         run: docker compose --profile test run --rm tooling npm run demo:offline
       - name: Retain reviewed summaries only

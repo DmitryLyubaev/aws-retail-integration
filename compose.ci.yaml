@@ -1,0 +1,5 @@
+services:
+  tooling:
+    user: "${P14_HOST_UID:?Checkout UID required}:${P14_HOST_GID:?Checkout GID required}"
+    group_add:
+      - "${P14_DOCKER_GID:?Docker socket GID required}"
