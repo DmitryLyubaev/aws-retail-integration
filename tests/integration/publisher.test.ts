@@ -182,7 +182,22 @@ test("concurrent publishers lease work once and late completion cannot downgrade
     withQueues(async (queue) => {
       const accepted = await acceptSale(db, tenantA, event());
       const deps = { db, queue, clock: { now: () => new Date() } };
-      const results = await Promise.all([publishOnce(deps), publishOnce(deps)]);
+      const settled = await Promise.allSettled([
+        publishOnce(deps),
+        publishOnce(deps),
+      ]);
+      assert.deepEqual(
+        settled.map((result) => result.status),
+        ["fulfilled", "fulfilled"],
+        settled
+          .map((result) =>
+            result.status === "rejected" ? String(result.reason) : "",
+          )
+          .join(" "),
+      );
+      const results = settled.map(
+        (result) => (result as PromiseFulfilledResult<number>).value,
+      );
       assert.equal(
         results.reduce((a, b) => a + b, 0),
         1,

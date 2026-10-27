@@ -10,6 +10,12 @@ export function openDb(url: string): Db {
     connectionTimeoutMillis: 5000,
     statement_timeout: 10000,
   });
+  pool.on("error", () => {
+    process.stderr.write(
+      JSON.stringify({ component: "database", code: "idle_connection_lost" }) +
+        "\n",
+    );
+  });
   return { pool, close: () => pool.end() };
 }
 export async function transaction<T>(
