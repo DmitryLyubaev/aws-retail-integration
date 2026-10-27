@@ -1,0 +1,31 @@
+name: p14
+services:
+  postgres:
+    image: postgres:17-bookworm@sha256:ec4dfc6571f04fe0731ce948c1500d676af49a7224392dcc6995cc1ee33a94bb
+    environment:
+      POSTGRES_PASSWORD: local-only-password
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    volumes: [pgdata:/var/lib/postgresql/data]
+  elasticmq:
+    image: softwaremill/elasticmq-native@sha256:e2a117210124256cd61ab9ae1a7856527d959aa2e92842f2f81826e30d17460e
+    volumes: [./config/elasticmq.conf:/opt/elasticmq.conf:ro]
+  tooling:
+    profiles: [test]
+    build:
+      context: .
+      target: tooling
+    environment:
+      TEST_DATABASE_URL: postgres://postgres:local-only-password@postgres:5432/postgres
+      TEST_QUEUE_ENDPOINT: http://elasticmq:9324
+      AWS_EC2_METADATA_DISABLED: "true"
+    volumes: [.:/app, modules:/app/node_modules]
+    depends_on:
+      postgres: { condition: service_healthy }
+      elasticmq: { condition: service_started }
+volumes:
+  pgdata:
+  modules:

@@ -1,0 +1,10 @@
+.git
+node_modules
+dist
+.local
+.superpowers
+results
+.env
+*.tfstate*
+*.tfplan
+*.tfvars
