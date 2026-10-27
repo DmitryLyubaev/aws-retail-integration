@@ -14,7 +14,9 @@
     "test": "node scripts/test.mjs",
     "test:one": "node scripts/test.mjs",
     "check": "npm run format:check && npm run typecheck && npm run build && npm test",
-    "demo:offline": "npm run build && node scripts/demo.mjs"
+    "demo:offline": "npm run build && node scripts/demo.mjs",
+    "build:cleanup": "node scripts/build.mjs",
+    "check:infra": "node scripts/infra.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-ecs": "3.1157.0",

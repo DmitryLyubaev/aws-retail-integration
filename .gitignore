@@ -1,5 +1,6 @@
 node_modules/
 dist/
+build/
 .env
 .env.*
 !.env.example
@@ -7,6 +8,7 @@ results/
 .local/
 .superpowers/
 .terraform/
+.terraform-linux/
 *.tfstate*
 *.tfplan
 *.tfvars

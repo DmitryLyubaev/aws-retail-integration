@@ -14,6 +14,7 @@ COPY --from=build /app/dist/ dist/
 COPY --from=build /app/node_modules/ node_modules/
 COPY package.json ./
 COPY migrations/ migrations/
+COPY config/rds-ca.pem config/rds-ca.pem
 ENTRYPOINT ["node", "dist/src/main.js"]
 
 FROM runtime AS tooling

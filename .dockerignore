@@ -1,6 +1,7 @@
 .git
 node_modules
 dist
+build
 .local
 .superpowers
 results
@@ -8,3 +9,5 @@ results
 *.tfstate*
 *.tfplan
 *.tfvars
+**/.terraform/
+**/.terraform-linux/

@@ -11,6 +11,55 @@ export const modes = [
   "evidence",
 ] as const;
 export type Mode = (typeof modes)[number];
+export function databaseConnection(
+  env: NodeJS.ProcessEnv,
+  mode?: Mode,
+): string {
+  let url: URL;
+  try {
+    if (env.DATABASE_URL) url = new URL(env.DATABASE_URL);
+    else {
+      if (
+        !env.DATABASE_HOST ||
+        !env.DATABASE_USER ||
+        !env.DATABASE_PASSWORD ||
+        !env.DATABASE_NAME
+      )
+        throw new DomainError("database_required", 400);
+      url = new URL("postgresql://placeholder:5432");
+      url.hostname = env.DATABASE_HOST;
+      url.username = env.DATABASE_USER;
+      url.password = env.DATABASE_PASSWORD;
+      url.pathname = "/" + env.DATABASE_NAME;
+      url.search = env.DATABASE_OPTIONS ?? "";
+    }
+  } catch (e) {
+    if (e instanceof DomainError) throw e;
+    throw new DomainError("invalid_database_config", 400);
+  }
+  if (!["postgres:", "postgresql:"].includes(url.protocol))
+    throw new DomainError("invalid_database_config", 400);
+  if (env.AWS_MODE === "true") {
+    if (
+      !url.hostname.endsWith(".ap-southeast-2.rds.amazonaws.com") ||
+      (url.port && url.port !== "5432") ||
+      url.searchParams.get("sslmode") !== "verify-full" ||
+      url.searchParams.get("sslrootcert") !== "/app/config/rds-ca.pem" ||
+      [...url.searchParams.keys()].length !== 2 ||
+      url.hash
+    )
+      throw new DomainError("invalid_database_tls", 400);
+    const expected =
+      mode === "receiver"
+        ? "p14_receiver"
+        : mode === "api" || mode === "worker"
+          ? "p14_app"
+          : null;
+    if (expected && decodeURIComponent(url.username) !== expected)
+      throw new DomainError("invalid_database_role", 400);
+  }
+  return url.href;
+}
 export function readConfig(mode: string, env: NodeJS.ProcessEnv = process.env) {
   if (!modes.includes(mode as Mode)) throw new DomainError("invalid_mode", 400);
   const aws = env.AWS_MODE === "true",

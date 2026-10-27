@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { readConfig } from "./config.js";
+import { readConfig, databaseConnection } from "./config.js";
 import { runCli } from "./cli.js";
 import { DomainError } from "./domain/errors.js";
 import { openDb } from "./db/connect.js";
@@ -30,9 +30,8 @@ async function main() {
     process.exitCode = report.status === "passed" ? 0 : 1;
     return;
   }
-  if (!process.env.DATABASE_URL)
-    throw new DomainError("database_required", 400);
-  const db = openDb(process.env.DATABASE_URL);
+  const databaseUrl = databaseConnection(process.env, config.mode);
+  const db = openDb(databaseUrl);
   try {
     if (config.mode === "load") {
       const report = await runLoad({
@@ -72,7 +71,7 @@ async function main() {
         const options = {
           ...input,
           db,
-          databaseUrl: process.env.DATABASE_URL,
+          databaseUrl,
           queueClient,
         };
         const report =
@@ -94,9 +93,12 @@ async function main() {
       return;
     }
     if (config.mode === "seed") {
-      if (!process.env.SEED_FILE)
+      if (!process.env.SEED_FILE && !process.env.SEED_DATA)
         throw new DomainError("seed_file_required", 400);
-      const input = JSON.parse(await readFile(process.env.SEED_FILE, "utf8"));
+      const input = JSON.parse(
+        process.env.SEED_DATA ??
+          (await readFile(process.env.SEED_FILE!, "utf8")),
+      );
       await seedCredentials(db, input.application);
       await seedReceiverCredentials(db, input.receiver);
       await db.close();
