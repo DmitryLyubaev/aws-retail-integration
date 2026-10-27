@@ -151,9 +151,14 @@ Keep plans/state and Exec/database raw logs out of public CI artifacts.
 
 ## Teardown and closure
 
-Begin at hour four even when acceptance fails. An expired session can still use
-the protected **Owned AWS session destruction** workflow or the independent owner
-supervisor. A successful destruction command only means that command completed;
+Begin at hour four even when acceptance fails. After the application window
+expires, the protected **Owned AWS session destruction** workflow and independent
+owner supervisor remain available within the six-hour closure envelope. Lifecycle
+Terraform commands receive at most 45 minutes and stop at the applicable cleanup
+or closure deadline. A timed-out apply never starts migration or services. At the
+six-hour deadline, unfinished cleanup is a failure requiring immediate owner
+recovery with the retained private configuration/state and direct Terraform
+destruction; do not extend a workflow session to hide the breach. A successful destruction command only means that command completed;
 it is not A12 closure. Do not leave an unverified cleanup unattended.
 
 Inspect the owned inventory, including partial applies and restore extras:
@@ -180,3 +185,10 @@ Access errors, missing inventory or unfinished deletion remain unverified. Retai
 deadline breach; partial deletion is not full closure. Closure and later billing
 reconciliation must both be reported before claiming the live project complete.
 Do not rerun, enlarge the envelope or raise the budget without a new owner decision.
+
+The independent supervisor persists a private, session/config/account-bound
+session-destruction phase receipt before removing bootstrap resources. Retain
+that receipt with its local state so retries can resume bootstrap removal after
+the remote session state bucket has disappeared. Existing absent buckets and ECR
+repositories are tolerated; access errors remain failures. The receipt records a
+successful Terraform phase only, never complete AWS closure.
