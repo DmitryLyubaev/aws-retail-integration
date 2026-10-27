@@ -27,5 +27,6 @@ output "inventory" {
     alarmNames               = [aws_cloudwatch_metric_alarm.dlq.alarm_name, aws_cloudwatch_metric_alarm.failed.alarm_name]
     cleanupFunction          = aws_lambda_function.cleanup.function_name
     cleanupSchedule          = aws_scheduler_schedule.cleanup.name
+    iamRoleNames             = concat([aws_iam_role.application.name, aws_iam_role.worker.name, aws_iam_role.maintenance.name, aws_iam_role.cleanup.name, aws_iam_role.scheduler.name], [for role in aws_iam_role.execution : role.name])
   }
 }

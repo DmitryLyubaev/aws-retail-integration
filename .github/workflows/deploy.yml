@@ -1,0 +1,100 @@
+name: Reviewed AWS plan or apply
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        type: choice
+        options: [plan, apply]
+        required: true
+      source_commit:
+        type: string
+        required: true
+      session_id:
+        type: string
+        required: true
+      image_digest:
+        type: string
+        required: true
+      session_start:
+        description: Approved UTC start, YYYY-MM-DDTHH:mm:ssZ
+        type: string
+        required: true
+      config_key:
+        type: string
+        required: true
+      config_sha256:
+        type: string
+        required: true
+      plan_key:
+        type: string
+        required: false
+      plan_sha256:
+        type: string
+        required: false
+      reviewed_plan:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: p14-${{ inputs.session_id }}
+  cancel-in-progress: false
+jobs:
+  delivery:
+    if: github.ref == 'refs/heads/main' && github.repository == vars.APPROVED_REPOSITORY
+    environment: aws-demo
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      AWS_REGION: ap-southeast-2
+      DEPLOYMENT_ENVIRONMENT: aws-demo
+      EXPECTED_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+      APPROVED_REPOSITORY: ${{ vars.APPROVED_REPOSITORY }}
+      STATE_BUCKET: ${{ secrets.AWS_STATE_BUCKET }}
+      REQUEST_ACTION: ${{ inputs.action }}
+      REQUEST_SOURCE: ${{ inputs.source_commit }}
+      REQUEST_SESSION: ${{ inputs.session_id }}
+      REQUEST_IMAGE: ${{ inputs.image_digest }}
+      SESSION_START: ${{ inputs.session_start }}
+      CONFIG_KEY: ${{ inputs.config_key }}
+      CONFIG_SHA256: ${{ inputs.config_sha256 }}
+      REQUEST_PLAN_KEY: ${{ inputs.plan_key }}
+      REQUEST_PLAN_SHA: ${{ inputs.plan_sha256 }}
+      REVIEWED_PLAN: ${{ inputs.reviewed_plan }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.22.1
+      - name: Refuse invalid local dispatch before identity access
+        run: node scripts/aws-session.mjs prepare
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-southeast-2
+          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+          mask-aws-account-id: true
+          role-duration-seconds: 3600
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+      - name: Build cleanup and execute only the reviewed request
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build:cleanup
+          node scripts/aws-session.mjs execute
+      - name: Retain bounded decision summary
+        if: success()
+        run: |
+          mkdir -p results
+          cp .local/delivery-summary.json results/delivery-summary.json
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        if: success()
+        with:
+          name: delivery-decision
+          path: results/delivery-summary.json
+          retention-days: 7

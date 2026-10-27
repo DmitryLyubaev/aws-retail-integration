@@ -8,11 +8,13 @@ FROM node AS build
 RUN npm run build && npm prune --omit=dev --ignore-scripts --no-audit --no-fund
 
 FROM postgres:17-bookworm@sha256:ec4dfc6571f04fe0731ce948c1500d676af49a7224392dcc6995cc1ee33a94bb AS runtime
+ARG SOURCE_COMMIT=working-tree
+LABEL org.opencontainers.image.revision=$SOURCE_COMMIT
 COPY --from=node /usr/local/ /usr/local/
 WORKDIR /app
 COPY --from=build /app/dist/ dist/
 COPY --from=build /app/node_modules/ node_modules/
-COPY package.json ./
+COPY package*.json ./
 COPY migrations/ migrations/
 COPY config/rds-ca.pem config/rds-ca.pem
 ENTRYPOINT ["node", "dist/src/main.js"]

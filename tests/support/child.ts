@@ -1,11 +1,12 @@
 import { fork, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
+import { compiledTests, runtimePath } from "./runtime.js";
 export function startChild(
   script: string,
   env: Record<string, string>,
 ): ChildProcess {
-  return fork(script, [], {
-    execArgv: ["--import", "tsx"],
+  return fork(runtimePath(script), [], {
+    execArgv: compiledTests() ? [] : ["--import", "tsx"],
     env: { ...process.env, ...env },
     silent: true,
   });

@@ -19,6 +19,10 @@ run "private_bootstrap" {
     error_message = "Immutable images and gross budget guard required."
   }
   assert {
+    condition     = length(aws_budgets_budget.session.cost_filter) == 0 && aws_budgets_budget.session.cost_types[0].include_credit == false
+    error_message = "The gross account guard cannot depend on activation of a new allocation tag."
+  }
+  assert {
     condition     = strcontains(aws_iam_role.delivery.assume_role_policy, "environment:aws-demo") && !strcontains(aws_iam_role.delivery.assume_role_policy, "repo:*")
     error_message = "OIDC must bind the exact repository and protected environment."
   }

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { readConfig, databaseConnection } from "./config.js";
 import { runCli } from "./cli.js";
 import { DomainError } from "./domain/errors.js";
@@ -25,7 +26,10 @@ async function main() {
   }
   if (config.mode === "evidence") {
     if (config.aws) throw new DomainError("offline_evidence_only", 400);
-    const report = await runCases();
+    process.env.COMPILED_TESTS ??= String(!existsSync("src"));
+    const report = await runCases({
+      resultDirectory: process.env.RESULT_DIRECTORY,
+    });
     process.stdout.write(JSON.stringify(report) + "\n");
     process.exitCode = report.status === "passed" ? 0 : 1;
     return;

@@ -1,5 +1,5 @@
 import { format } from "prettier";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir, copyFile, chmod } from "node:fs/promises";
 const read = async (name) =>
   JSON.parse(await readFile("results/" + name + ".json", "utf8"));
 const [acceptance, load, restore] = await Promise.all(
@@ -11,6 +11,21 @@ if (
   restore.dedupeVerified !== true
 )
   throw new Error("Evidence is incomplete");
+if (!/^[a-f0-9-]{36}$/.test(acceptance.runId))
+  throw new Error("Invalid evidence run");
+const receipts = "results/runs/" + acceptance.runId;
+await mkdir(receipts, { recursive: true });
+for (const name of [
+  "acceptance.json",
+  "acceptance.tap",
+  "load.json",
+  "restore.json",
+  "load.dump",
+  "load.dump.manifest.json",
+]) {
+  await copyFile("results/" + name, receipts + "/" + name);
+  await chmod(receipts + "/" + name, 0o600);
+}
 const n = (value) => Number(value).toFixed(2);
 await writeFile(
   "docs/offline-report.md",
@@ -55,8 +70,8 @@ Load dataset hash: ${load.datasetSha256}.
 Dump hash: ${restore.backup.sha256}.
 Canonical backup/restored dataset hash: ${restore.restored.datasetSha256}.
 
-Private raw receipts are in ignored results/acceptance.tap,
-acceptance.json, load.json, restore.json and load.dump.
+Private raw receipts are retained in ignored ${receipts}/,
+including acceptance.tap, acceptance.json, load.json, restore.json and load.dump.
 Reproduce with npm run demo:offline in the Compose tooling container.
 The acceptance runner refuses source changes during a run and missing/skipped
 required assertions. Local evidence cannot mark AWS acceptance complete.

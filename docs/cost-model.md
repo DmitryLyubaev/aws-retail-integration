@@ -18,6 +18,11 @@ Base estimate: approximately **USD1.04**. Planning allowance: **USD5**. Operatin
 limit: **USD10 before tax**. The owner approved these planning limits; provisioning,
 identity changes, paid upgrades and actual expenditure require live approval.
 
+The gross budget covers the personal account, excluding credits, refunds and tax.
+The owner creates its alert before billing bootstrap work and imports it into
+private Terraform state. This avoids depending on activation of a new allocation
+tag during the short session. Other personal AWS usage can cause an earlier stop.
+
 Allow at most 0.2 GB logs (about USD0.134 ingestion plus storage/query), five custom
 metrics, two standard alarms, 50,000 SQS request units (about USD0.02), 1 GB ECR
 images and 1 GB combined S3 state versions/dump. Include up to six secrets, Cloud

@@ -20,6 +20,7 @@ export interface CaseOptions {
   resultDirectory?: string;
 }
 export interface CaseReport {
+  sourceFormat: "typescript" | "compiled";
   runId: string;
   at: string;
   brisbane: string;
@@ -86,6 +87,8 @@ export function reportFromObservations(
     },
   );
   return {
+    sourceFormat:
+      process.env.COMPILED_TESTS === "true" ? "compiled" : "typescript",
     runId: randomUUID(),
     at: at.toISOString(),
     brisbane: at.toLocaleString("en-AU", {
@@ -118,7 +121,10 @@ export async function runCases(options: CaseOptions = {}): Promise<CaseReport> {
     sha256(
       JSON.stringify(
         await Promise.all(
-          ["src", "tests", "migrations", "fixtures"].map(sourceHash),
+          (process.env.COMPILED_TESTS === "true"
+            ? ["dist/src", "dist/tests", "migrations", "dist/fixtures"]
+            : ["src", "tests", "migrations", "fixtures"]
+          ).map(sourceHash),
         ),
       ) + sha256(await readFile("package-lock.json")),
     );
@@ -132,12 +138,15 @@ export async function runCases(options: CaseOptions = {}): Promise<CaseReport> {
     const r = await exec(
       process.execPath,
       [
-        "--import",
-        "tsx",
+        ...(process.env.COMPILED_TESTS === "true" ? [] : ["--import", "tsx"]),
         "--test",
         "--test-concurrency=1",
         "--test-reporter=tap",
-        ...files,
+        ...files.map((file) =>
+          process.env.COMPILED_TESTS === "true"
+            ? "dist/" + file.replace(/\.ts$/, ".js")
+            : file,
+        ),
       ],
       { timeout: 240000, maxBuffer: 8 * 1024 * 1024 },
     );

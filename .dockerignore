@@ -11,3 +11,7 @@ results
 *.tfvars
 **/.terraform/
 **/.terraform-linux/
+**/*.tfstate*
+**/*.tfplan
+**/*.tfvars*
+**/.env*

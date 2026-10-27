@@ -1,4 +1,5 @@
 import test from "node:test";
+import { runtimeArgs } from "../support/runtime.js";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -97,7 +98,7 @@ for (const point of [
         withQueues(async (queue, config) => {
           const child = spawn(
             process.execPath,
-            ["--import", "tsx", "tests/support/publisher-child.ts"],
+            runtimeArgs("tests/support/publisher-child.ts"),
             {
               env: {
                 ...process.env,

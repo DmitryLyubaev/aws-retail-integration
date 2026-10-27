@@ -1,0 +1,64 @@
+name: Publish tested private image
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        type: string
+        required: true
+      session_id:
+        type: string
+        required: true
+      session_start:
+        type: string
+        required: true
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: p14-${{ inputs.session_id }}
+  cancel-in-progress: false
+jobs:
+  image:
+    if: github.ref == 'refs/heads/main' && github.repository == vars.APPROVED_REPOSITORY
+    environment: aws-demo
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      AWS_REGION: ap-southeast-2
+      DEPLOYMENT_ENVIRONMENT: aws-demo
+      EXPECTED_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+      APPROVED_REPOSITORY: ${{ vars.APPROVED_REPOSITORY }}
+      REQUEST_SOURCE: ${{ inputs.source_commit }}
+      REQUEST_SESSION: ${{ inputs.session_id }}
+      SESSION_START: ${{ inputs.session_start }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.22.1
+      - name: Guard image preparation before identity access
+        run: node scripts/aws-session.mjs prepare-publication
+      - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-southeast-2
+          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+          mask-aws-account-id: true
+          role-duration-seconds: 3600
+      - name: Build, test and publish this exact source
+        run: node scripts/aws-session.mjs publish
+      - name: Retain the immutable manifest receipt
+        run: |
+          mkdir -p results
+          cp .local/published-image.json results/image-publication.json
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: image-publication
+          path: results/image-publication.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove local test resources
+        if: always()
+        run: docker compose --profile test down -v --remove-orphans

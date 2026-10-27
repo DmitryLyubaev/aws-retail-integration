@@ -84,6 +84,8 @@ resource "aws_iam_role_policy" "delivery" {
     { Effect = "Allow", Action = ["route53:GetHostedZone", "route53:DeleteHostedZone", "route53:AssociateVPCWithHostedZone", "route53:ListResourceRecordSets", "route53:ChangeResourceRecordSets"], Resource = "arn:aws:route53:::hostedzone/*" },
     { Effect = "Allow", Action = ["route53:CreateHostedZone"], Resource = "*" },
     { Effect = "Allow", Action = ["route53:GetChange"], Resource = "arn:aws:route53:::change/*" },
+    { Effect = "Allow", Action = ["route53:ListHostedZonesByName"], Resource = "*" },
+    { Effect = "Allow", Action = ["secretsmanager:ListSecrets", "sqs:ListQueues"], Resource = "*", Condition = { StringEquals = { "aws:RequestedRegion" = var.region } } },
     { Effect = "Allow", Action = ["lambda:CreateFunction", "lambda:DeleteFunction", "lambda:GetFunction", "lambda:GetFunctionCodeSigningConfig", "lambda:UpdateFunctionCode", "lambda:UpdateFunctionConfiguration", "lambda:ListVersionsByFunction", "lambda:TagResource", "lambda:UntagResource", "lambda:PutFunctionEventInvokeConfig", "lambda:GetFunctionEventInvokeConfig", "lambda:DeleteFunctionEventInvokeConfig"], Resource = "arn:aws:lambda:${local.regional}:function:p14-*" },
     { Effect = "Allow", Action = ["scheduler:CreateSchedule", "scheduler:UpdateSchedule", "scheduler:DeleteSchedule", "scheduler:GetSchedule"], Resource = "arn:aws:scheduler:${local.regional}:schedule/default/p14-*" }
   ] })
@@ -94,12 +96,9 @@ resource "aws_budgets_budget" "session" {
   limit_amount = "10"
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
-  cost_filter {
-    name   = "TagKeyValue"
-    values = ["user:Project$p14"]
-  }
   cost_types {
     include_credit = false
+    include_tax    = false
     include_refund = false
     use_blended    = false
   }

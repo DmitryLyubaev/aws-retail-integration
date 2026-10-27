@@ -1,4 +1,5 @@
 import test from "node:test";
+import { runtimeArgs } from "../support/runtime.js";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -84,7 +85,7 @@ test("CLI uses real HTTP and subprocess output never reveals credentials", () =>
       };
       const result = await promisify(execFile)(
         process.execPath,
-        ["--import", "tsx", "src/main.ts", "cli", "list", "--json"],
+        [...runtimeArgs("src/main.ts"), "cli", "list", "--json"],
         { env },
       );
       assert.deepEqual(JSON.parse(result.stdout), []);
@@ -99,7 +100,7 @@ test("CLI uses real HTTP and subprocess output never reveals credentials", () =>
       assert.ok(!out.includes(env.DATABASE_URL));
       const unknown = await promisify(execFile)(
         process.execPath,
-        ["--import", "tsx", "src/main.ts", "nonsense"],
+        [...runtimeArgs("src/main.ts"), "nonsense"],
         { env },
       ).catch((e) => e);
       assert.equal(unknown.code, 1);
