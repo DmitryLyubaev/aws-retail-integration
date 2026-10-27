@@ -17,8 +17,8 @@ test("migrations are repeatable, upgrade populated core and runtime cannot migra
         tenantA,
         parseSale(Buffer.from(JSON.stringify(fixture()))),
       );
-      await migrate(db);
-      await migrate(db);
+      await migrate(db, { through: "002_credentials.sql" });
+      await migrate(db, { through: "002_credentials.sql" });
       await seedCredentials(db, [{ ...tenantA, token: tokenA }]);
       assert.equal(
         (
