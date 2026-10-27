@@ -78,15 +78,16 @@ export async function completePublish(
     if (!rows[0]) return false;
     if (rows[0].failures === 5) {
       const ref = rows[0];
-      const failed = await client.query(
-        "update app.generations set state='failed',failure_code='queue_publish_failed',fence=null,lease_until=null where tenant_id=$1 and delivery_id=$2 and generation=$3 and state not in ('delivered','failed') returning generation",
-        [ref.tenant_id, ref.delivery_id, ref.generation],
+      await failGeneration(
+        client,
+        {
+          tenantId: ref.tenant_id,
+          deliveryId: ref.delivery_id,
+          generation: ref.generation,
+        },
+        "queue_publish_failed",
+        now,
       );
-      if (failed.rowCount)
-        await client.query(
-          "insert into app.audit(tenant_id,delivery_id,generation,kind,code,event_key) values($1,$2,$3,'failed','queue_publish_failed','terminal') on conflict do nothing",
-          [ref.tenant_id, ref.delivery_id, ref.generation],
-        );
     }
     return true;
   });

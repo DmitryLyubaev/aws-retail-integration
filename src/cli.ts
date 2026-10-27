@@ -56,11 +56,11 @@ export async function runCli(
       throw new DomainError("credential_required", 401);
     let path = "/v1/deliveries",
       method = "GET",
-      body: string | undefined;
+      body: string | Buffer<ArrayBuffer> | undefined;
     if (command === "submit") {
       path = "/v1/sales";
       method = "POST";
-      body = await readFile(flags.get("--file")!, "utf8");
+      body = await readFile(flags.get("--file")!);
     }
     if (command === "show")
       path += "/" + encodeURIComponent(flags.get("--id")!);

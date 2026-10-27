@@ -116,7 +116,7 @@ export async function assertQuiescent(options: BackupOptions) {
     throw new DomainError("dataset_not_quiescent", 409);
   await queuesEmpty(options);
 }
-function pgEnv(databaseUrl: string): NodeJS.ProcessEnv {
+export function pgEnv(databaseUrl: string): NodeJS.ProcessEnv {
   const u = new URL(databaseUrl);
   return {
     ...process.env,
@@ -126,6 +126,9 @@ function pgEnv(databaseUrl: string): NodeJS.ProcessEnv {
     PGUSER: decodeURIComponent(u.username),
     PGPASSWORD: decodeURIComponent(u.password),
     PGSSLMODE: u.searchParams.get("sslmode") ?? "prefer",
+    ...(u.searchParams.has("sslrootcert")
+      ? { PGSSLROOTCERT: u.searchParams.get("sslrootcert")! }
+      : {}),
   };
 }
 export async function backupDataset(

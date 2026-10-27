@@ -18,8 +18,8 @@ variables {
   image_repository_url = "111122223333.dkr.ecr.ap-southeast-2.amazonaws.com/p14"
   state_bucket         = "p14-example-private-state"
   session_start        = "2030-01-01T00:00:00Z"
-  cleanup_at           = "2030-01-01T04:00:00Z"
-  session_end          = "2030-01-01T06:00:00Z"
+  cleanup_at           = jsondecode(file("tests/workflow-times.json")).cleanupAt
+  session_end          = jsondecode(file("tests/workflow-times.json")).sessionEnd
   role_passwords       = { migrator = "synthetic_migrator_password", application = "synthetic_application_password", receiver = "synthetic_receiver_password" }
   operator_tokens      = { retailer-a = "synthetic_operator_a_000000000000000000", retailer-b = "synthetic_operator_b_000000000000000000" }
   receiver_tokens      = { retailer-a = "synthetic_receiver_a_000000000000000000", retailer-b = "synthetic_receiver_b_000000000000000000" }

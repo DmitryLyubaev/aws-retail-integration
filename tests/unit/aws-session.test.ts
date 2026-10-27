@@ -1,10 +1,116 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   responseIsAbsent,
   supervisorBinding,
   readyMatches,
+  sessionTimes,
+  command,
+  terraformOperation,
+  destroyPhases,
 } from "../../scripts/aws-session.mjs";
+
+test("generated workflow deadlines have canonical Terraform second-resolution timestamps", () => {
+  assert.deepEqual(
+    sessionTimes(Date.parse("2030-01-01T00:00:00Z")),
+    JSON.parse(readFileSync("infra/session/tests/workflow-times.json", "utf8")),
+  );
+  assert.throws(() => sessionTimes(Date.parse("2030-01-01T00:00:00.123Z")));
+});
+
+test("Terraform provisioning gets a bounded allowance exceeding normal RDS creation", async () => {
+  const now = Date.parse("2030-01-01T00:00:00Z");
+  const context = sessionTimes(now);
+  const timeouts: number[] = [];
+  const run: typeof command = async (_bin, _args, options) => {
+    timeouts.push(options.timeout);
+    return { code: 0, stdout: "ok", stderr: "" };
+  };
+  await terraformOperation(context, "apply", [], "unused", run, () => now);
+  assert.ok(timeouts[0]! >= 20 * 60000);
+  await terraformOperation(
+    context,
+    "apply",
+    [],
+    "unused",
+    run,
+    () => Date.parse(context.cleanupAt) - 10000,
+  );
+  assert.equal(timeouts[1], 10000);
+  await terraformOperation(
+    context,
+    "destroy",
+    [],
+    "unused",
+    run,
+    () => Date.parse(context.sessionEnd) - 5000,
+  );
+  assert.equal(timeouts[2], 5000);
+  await assert.rejects(
+    terraformOperation(context, "apply", [], "unused", run, () =>
+      Date.parse(context.cleanupAt),
+    ),
+    /deadline/,
+  );
+  await assert.rejects(
+    terraformOperation(
+      context,
+      "apply",
+      [],
+      "unused",
+      async () => ({ code: null, timedOut: true, stdout: "", stderr: "" }),
+      () => now,
+    ),
+    /timeout/,
+  );
+});
+
+test(
+  "an interrupted subprocess that ignores SIGTERM is killed by its hard timeout",
+  { timeout: 5000 },
+  async () => {
+    const start = Date.now();
+    const result = await command(
+      process.execPath,
+      ["-e", "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],
+      { timeout: 400 },
+    );
+    assert.equal(result.timedOut, true);
+    assert.notEqual(result.code, 0);
+    assert.ok(Date.now() - start < 2000);
+  },
+);
+
+test("bootstrap destroy resumes after its state bucket was removed without reinitializing the session", async () => {
+  let bucket = true,
+    sessionCalls = 0,
+    bootstrapCalls = 0,
+    recorded = false;
+  const clients = {
+    session: async () => {
+      sessionCalls++;
+      if (!bucket) throw new Error("backend_bucket_absent");
+    },
+    recordSession: async () => {
+      recorded = true;
+    },
+    bootstrap: async () => {
+      bootstrapCalls++;
+      bucket = false;
+      if (bootstrapCalls === 1) throw new Error("partial_bootstrap");
+    },
+  };
+  const destroy = destroyPhases(clients);
+  await assert.rejects(destroy(), /partial_bootstrap/);
+  await destroy();
+  assert.equal(sessionCalls, 1);
+  assert.equal(bootstrapCalls, 2);
+  assert.equal(recorded, true);
+  await destroyPhases(clients, recorded)(); // A new supervisor resumes its private receipt.
+  assert.equal(sessionCalls, 1);
+  assert.equal(bootstrapCalls, 3);
+});
 test("closure probes recognize absent resources while access and transport errors remain unverified", () => {
   for (const code of [
     "404",

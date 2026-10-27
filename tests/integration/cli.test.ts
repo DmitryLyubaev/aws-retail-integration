@@ -14,6 +14,61 @@ import { join } from "node:path";
 import { fixture } from "../support/fixture.js";
 import { publishOnce } from "../../src/worker/publisher.js";
 import { consumeOnce } from "../../src/worker/consumer.js";
+
+test("CLI submits original invalid UTF-8 bytes and API rejects without accepted work", () =>
+  withWorker(async (deps) => {
+    const api = await startApi({
+      db: deps.db,
+      host: "127.0.0.1",
+      port: 0,
+      demoMode: true,
+      receiverOrigin: deps.receiverOrigin,
+    });
+    const dir = await mkdtemp(join(tmpdir(), "p14-invalid-cli-"));
+    const file = join(dir, "sale.json");
+    const raw = Buffer.from(JSON.stringify(fixture()));
+    raw[raw.indexOf(Buffer.from('"sku":"')) + 7] = 0xff;
+    await writeFile(file, raw);
+    let error = "";
+    try {
+      const direct = await fetch(new URL("/v1/sales", api.origin), {
+        method: "POST",
+        headers: {
+          authorization: "Bearer " + tokenA,
+          "content-type": "application/json",
+        },
+        body: raw,
+      });
+      assert.equal(direct.status, 400);
+      await direct.body?.cancel();
+      assert.equal(
+        await runCli(
+          ["submit", "--file", file],
+          {
+            DEMO_API_ORIGIN: api.origin,
+            DEMO_TOKEN: tokenA,
+          },
+          {
+            out: () => {},
+            err: (s) => {
+              error += s;
+            },
+          },
+        ),
+        1,
+      );
+      assert.match(error, /http_400/);
+      for (const table of ["events", "generations", "outbox", "audit"])
+        assert.equal(
+          (await deps.db.pool.query(`select count(*)::int n from app.${table}`))
+            .rows[0].n,
+          0,
+        );
+    } finally {
+      await api.close();
+      await rm(dir, { recursive: true });
+    }
+  }));
 test("CLI submit, fault, show and idempotent replay exercise the HTTP path", () =>
   withWorker(async (deps) => {
     const api = await startApi({

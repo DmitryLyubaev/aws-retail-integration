@@ -19,8 +19,20 @@ export function command(binary, args, { input, log, timeout = 300000 } = {}) {
     });
     let stdout = "",
       stderr = "",
-      size = 0;
-    const timer = setTimeout(() => child.kill("SIGTERM"), timeout);
+      size = 0,
+      timedOut = false;
+    const grace = Math.min(2000, Math.floor(timeout / 4));
+    const timer = setTimeout(
+      () => {
+        timedOut = true;
+        child.kill("SIGTERM");
+      },
+      Math.max(0, timeout - grace),
+    );
+    const hardTimer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, timeout);
     const collect = (chunk, err) => {
       size += chunk.length;
       if (size > 16 * 1024 * 1024) {
@@ -34,13 +46,15 @@ export function command(binary, args, { input, log, timeout = 300000 } = {}) {
     child.stderr.on("data", (c) => collect(c, true));
     child.on("error", () => {
       clearTimeout(timer);
+      clearTimeout(hardTimer);
       reject(new Error("command_unavailable"));
     });
     child.on("close", async (code) => {
       clearTimeout(timer);
+      clearTimeout(hardTimer);
       try {
         if (log) await writeFile(log, stdout + "\n" + stderr, { mode: 0o600 });
-        resolve({ code, stdout, stderr });
+        resolve({ code: timedOut ? null : code, stdout, stderr, timedOut });
       } catch {
         reject(new Error("private_log_failed"));
       }
@@ -52,6 +66,28 @@ async function must(binary, args, options) {
   const r = await command(binary, args, options);
   if (r.code !== 0) throw new Error("command_failed");
   return r.stdout;
+}
+export async function terraformOperation(
+  context,
+  operation,
+  args,
+  log,
+  run = command,
+  now = Date.now,
+) {
+  const cutoff = Date.parse(
+    operation === "destroy" ? context.sessionEnd : context.cleanupAt,
+  );
+  const remaining = cutoff - now();
+  if (!Number.isFinite(remaining) || remaining <= 0)
+    throw new Error("terraform_deadline");
+  const result = await run("terraform", args, {
+    log,
+    timeout: Math.min(45 * 60000, remaining),
+  });
+  if (result.timedOut) throw new Error("terraform_timeout");
+  if (result.code !== 0) throw new Error("command_failed");
+  return result.stdout;
 }
 const aws = (...args) =>
   command("aws", ["--no-cli-pager", "--region", "ap-southeast-2", ...args]);
@@ -80,6 +116,14 @@ function inventory(request, context) {
     dbIdentifier: request.sessionId,
   };
 }
+export function sessionTimes(start) {
+  if (!Number.isFinite(start) || start % 1000 !== 0)
+    throw new Error("session_start_precision");
+  return {
+    cleanupAt: new Date(start + 14400000).toISOString().replace(".000Z", "Z"),
+    sessionEnd: new Date(start + 21600000).toISOString().replace(".000Z", "Z"),
+  };
+}
 async function prepare(publication = false) {
   await mkdir(".local/logs", { recursive: true });
   const e = process.env;
@@ -102,12 +146,7 @@ async function prepare(publication = false) {
     region: e.AWS_REGION,
     sourceCommit: e.GITHUB_SHA,
     now: new Date().toISOString(),
-    cleanupAt: Number.isFinite(start)
-      ? new Date(start + 14400000).toISOString()
-      : "",
-    sessionEnd: Number.isFinite(start)
-      ? new Date(start + 21600000).toISOString()
-      : "",
+    ...sessionTimes(start),
     configSha256: e.CONFIG_SHA256 ?? "",
     reviewedPlan: e.REVIEWED_PLAN === "true",
   };
@@ -427,8 +466,9 @@ async function execute() {
   const clients = {
     now: () => new Date().toISOString(),
     async plan() {
-      await must(
-        "terraform",
+      await terraformOperation(
+        context,
+        "plan",
         [
           "-chdir=infra/session",
           "plan",
@@ -436,7 +476,7 @@ async function execute() {
           "-var-file=../../.local/session.json",
           "-out=../../.local/plan.bin",
         ],
-        { log: ".local/logs/terraform-plan.log" },
+        ".local/logs/terraform-plan.log",
       );
       const digest = sha(await readFile(".local/plan.bin"));
       const receipt = {
@@ -495,15 +535,16 @@ async function execute() {
         )
       )
         throw new Error("supervisor_required");
-      await must(
-        "terraform",
+      await terraformOperation(
+        context,
+        "apply",
         [
           "-chdir=infra/session",
           "apply",
           "-input=false",
           "../../.local/plan.bin",
         ],
-        { log: ".local/logs/terraform-apply.log" },
+        ".local/logs/terraform-apply.log",
       );
       const outputs = JSON.parse(
         await must("terraform", ["-chdir=infra/session", "output", "-json"]),
@@ -603,8 +644,9 @@ export async function destroySession(config) {
   else if (!/ResourceNotFoundException/.test(logs.stderr))
     throw new Error("evidence_export_failed");
   await emptyBucket(backupBucket);
-  await must(
-    "terraform",
+  await terraformOperation(
+    config.context,
+    "destroy",
     [
       "-chdir=infra/session",
       "destroy",
@@ -612,7 +654,7 @@ export async function destroySession(config) {
       "-auto-approve",
       "-var-file=../../" + config.configFile,
     ],
-    { log: ".local/logs/terraform-destroy.log" },
+    ".local/logs/terraform-destroy.log",
   );
 }
 export function responseIsAbsent(r, empty) {
@@ -851,6 +893,17 @@ export async function verifyClosure(config) {
   }
   return checks;
 }
+export function destroyPhases(clients, resumed = false) {
+  let sessionComplete = resumed;
+  return async () => {
+    if (!sessionComplete) {
+      await clients.session();
+      await clients.recordSession();
+      sessionComplete = true;
+    }
+    await clients.bootstrap();
+  };
+}
 export async function supervisorClients(config) {
   if (
     !supervisorBinding(config) ||
@@ -874,6 +927,29 @@ export async function supervisorClients(config) {
     };
   const guard = validateDelivery(request, context);
   if (!guard.allowed) throw new Error(guard.code);
+  const phaseFile = `.local/session-destroyed-${request.sessionId}.json`;
+  const phaseBinding = sha(
+    JSON.stringify({
+      sessionId: request.sessionId,
+      sourceCommit: request.sourceCommit,
+      imageDigest: request.imageDigest,
+      accountId: context.actualAccount,
+      configSha256: context.configSha256,
+      stateBucket: config.stateBucket,
+    }),
+  );
+  let resumed = false;
+  try {
+    const receipt = await jsonFile(phaseFile);
+    if (
+      receipt.phase !== "session_destroyed" ||
+      receipt.binding !== phaseBinding
+    )
+      throw new Error("destroy_phase_binding");
+    resumed = true;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
   let heartbeatAt = 0;
   return {
     async heartbeat() {
@@ -911,41 +987,62 @@ export async function supervisorClients(config) {
         await import("../dist/src/operations/cleanup.js");
       await cleanupCostDrivers(context.inventory, awsCleanupClients());
     },
-    async destroy() {
-      await destroySession(config);
-      if (config.bootstrap) {
-        await emptyBucket(config.bootstrap.stateBucket);
-        const images = await awsJson(
-          "ecr",
-          "list-images",
-          "--repository-name",
-          "p14-retail-integration",
-        );
-        if (images.imageIds?.length) {
-          await save(".local/ecr-delete.json", images.imageIds);
-          const r = await aws(
-            "ecr",
-            "batch-delete-image",
-            "--repository-name",
-            "p14-retail-integration",
-            "--image-ids",
-            "file://.local/ecr-delete.json",
-          );
-          if (r.code !== 0) throw new Error("ecr_delete");
-        }
-        await must(
-          "terraform",
-          [
-            "-chdir=infra/bootstrap",
-            "destroy",
-            "-input=false",
-            "-auto-approve",
-            "-var-file=../../" + config.bootstrap.configFile,
-          ],
-          { log: ".local/logs/bootstrap-destroy.log" },
-        );
-      }
-    },
+    destroy: destroyPhases(
+      {
+        session: () => destroySession(config),
+        recordSession: () =>
+          save(phaseFile, {
+            phase: "session_destroyed",
+            binding: phaseBinding,
+          }),
+        async bootstrap() {
+          if (config.bootstrap) {
+            await identity(context.expectedAccount);
+            await emptyBucket(config.bootstrap.stateBucket);
+            const imageResult = await aws(
+              "ecr",
+              "list-images",
+              "--repository-name",
+              "p14-retail-integration",
+              "--output",
+              "json",
+            );
+            if (
+              imageResult.code !== 0 &&
+              !responseIsAbsent(imageResult, () => false)
+            )
+              throw new Error("ecr_inspect");
+            const images =
+              imageResult.code === 0 ? JSON.parse(imageResult.stdout) : {};
+            if (images.imageIds?.length) {
+              await save(".local/ecr-delete.json", images.imageIds);
+              const r = await aws(
+                "ecr",
+                "batch-delete-image",
+                "--repository-name",
+                "p14-retail-integration",
+                "--image-ids",
+                "file://.local/ecr-delete.json",
+              );
+              if (r.code !== 0) throw new Error("ecr_delete");
+            }
+            await terraformOperation(
+              context,
+              "destroy",
+              [
+                "-chdir=infra/bootstrap",
+                "destroy",
+                "-input=false",
+                "-auto-approve",
+                "-var-file=../../" + config.bootstrap.configFile,
+              ],
+              ".local/logs/bootstrap-destroy.log",
+            );
+          }
+        },
+      },
+      resumed,
+    ),
     verify: () => verifyClosure(config),
   };
 }

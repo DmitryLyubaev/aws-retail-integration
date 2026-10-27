@@ -144,6 +144,30 @@ test("failed migration prevents all service starts and invokes independent clean
   assert.deepEqual(starts, []);
   assert.equal(cleanup.length, 1);
 });
+
+test("an interrupted apply stops the workflow and invokes cleanup without migration or startup", async () => {
+  const calls: string[] = [];
+  const result = await runDelivery(request, context, {
+    plan: async () => {},
+    apply: async () => {
+      throw new Error("terraform_timeout");
+    },
+    migrate: async () => {
+      calls.push("migrate");
+      return 0;
+    },
+    seed: async () => 0,
+    start: async () => {
+      calls.push("start");
+    },
+    destroy: async () => {},
+    cleanup: async () => {
+      calls.push("cleanup");
+    },
+  });
+  assert.equal(result.allowed, false);
+  assert.deepEqual(calls, ["cleanup"]);
+});
 test("successful migration and seed start exactly one of each owned service", async () => {
   const starts: unknown[] = [];
   const result = await runDelivery(request, context, {

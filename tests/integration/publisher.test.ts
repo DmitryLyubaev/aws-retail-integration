@@ -13,7 +13,50 @@ import { createQueue } from "../../src/worker/queue.js";
 import { withQueues } from "../support/queues.js";
 import { withDb, tenantA } from "../support/database.js";
 import { fixture } from "../support/fixture.js";
+import { withWorker } from "../support/worker.js";
+import { claimAttempt } from "../../src/db/attempts.js";
+import { claimOutbox, completePublish } from "../../src/db/outbox.js";
+import { replayDelivery } from "../../src/db/replay.js";
+import { consumeOnce } from "../../src/worker/consumer.js";
+import { assertQuiescent } from "../../src/operations/backup.js";
 const event = () => parseSale(Buffer.from(JSON.stringify(fixture())));
+
+test("publish exhaustion abandons an in-flight attempt and replay can become quiescent", () =>
+  withWorker(async (deps, admin, extra) => {
+    const accepted = await acceptSale(deps.db, tenantA, event());
+    const ref = accepted.delivery;
+    let now = new Date();
+    // A send may reach SQS even when the publisher observes a transport failure.
+    const attempt = await claimAttempt(deps.db, ref, now);
+    assert.ok(attempt);
+    for (let i = 0; i < 5; i++) {
+      const [claim] = await claimOutbox(deps.db, now);
+      assert.ok(claim);
+      await completePublish(deps.db, claim, now, false);
+      now = new Date(now.getTime() + 2100);
+    }
+    assert.equal(
+      (await deps.db.pool.query("select state from app.attempts")).rows[0]
+        .state,
+      "abandoned",
+    );
+    await replayDelivery(deps.db, tenantA, ref.deliveryId, 1, "publish-replay");
+    await publishOnce(deps);
+    await consumeOnce(deps);
+    assert.equal(
+      (await getDelivery(deps.db, tenantA, ref.deliveryId))?.state,
+      "delivered",
+    );
+    await assertQuiescent({
+      db: admin,
+      databaseUrl: extra.maintenanceUrl,
+      file: "/unused",
+      queueClient: extra.client,
+      queueConfig: extra.config,
+      writersStopped: true,
+      mode: "local",
+    });
+  }));
 test("uncommitted outbox work is invisible to the publisher", () =>
   withDb(async (db) =>
     withQueues(async (queue) => {
