@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { QueueEnvelope } from "../domain/delivery.js";
 import { transaction, type Db } from "./connect.js";
+import { failGeneration } from "./attempts.js";
 export interface OutboxClaim {
   id: string;
   fence: string;
@@ -10,10 +11,21 @@ export interface OutboxClaim {
 }
 export async function claimOutbox(db: Db, now: Date): Promise<OutboxClaim[]> {
   return transaction(db, async (client) => {
-    await client.query(
-      "with expired as (update app.generations set state='failed',failure_code='deadline_exceeded',fence=null,lease_until=null where state not in ('delivered','failed') and deadline_at<=$1 returning tenant_id,delivery_id,generation) insert into app.audit(tenant_id,delivery_id,generation,kind,code,event_key) select tenant_id,delivery_id,generation,'failed','deadline_exceeded','terminal' from expired on conflict do nothing",
+    const expired = await client.query(
+      "select tenant_id,delivery_id,generation,attempts from app.generations where state not in ('delivered','failed') and deadline_at<=$1 for update skip locked",
       [now],
     );
+    for (const row of expired.rows)
+      await failGeneration(
+        client,
+        {
+          tenantId: row.tenant_id,
+          deliveryId: row.delivery_id,
+          generation: row.generation,
+        },
+        row.attempts > 0 ? "delivery_unconfirmed" : "deadline_exceeded",
+        now,
+      );
     await client.query(
       "update app.outbox o set state=case when g.state='delivered' then 'published' else 'failed' end,fence=null,lease_until=null from app.generations g where g.tenant_id=o.tenant_id and g.delivery_id=o.delivery_id and g.generation=o.generation and g.state in ('delivered','failed') and o.state in ('pending','publishing')",
     );
