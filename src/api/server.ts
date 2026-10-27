@@ -7,6 +7,7 @@ import { DomainError } from "../domain/errors.js";
 import { parseSale } from "../domain/sale.js";
 import { rawHttp, bodyObject, bearer, type RunningHttp } from "../http.js";
 import { authenticateRequest } from "./auth.js";
+import { observe, telemetry } from "../operations/observe.js";
 export async function startApi(deps: {
   db: Db;
   host: string;
@@ -23,6 +24,16 @@ export async function startApi(deps: {
       ctx,
       parseSale(req.body as Buffer),
     );
+    if (!result.duplicate) {
+      await observe(deps.db, { accepted: 1 });
+      telemetry.log({
+        component: "api",
+        code: "accepted",
+        tenantId: ctx.tenantId,
+        deliveryId: result.delivery.deliveryId,
+        generation: result.delivery.generation,
+      });
+    }
     return reply.code(result.duplicate ? 200 : 202).send(result);
   });
   app.get<{ Querystring: Record<string, unknown> }>(

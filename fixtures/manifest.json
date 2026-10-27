@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "synthetic": true,
+  "expected": {
+    "submissions": 240,
+    "effects": 200,
+    "tenants": 2,
+    "rate": 5,
+    "concurrency": 5,
+    "drainSeconds": 300
+  },
+  "cases": [
+    {
+      "caseId": "A1",
+      "file": "tests/integration/api.test.ts",
+      "checks": [
+        "API authenticates tenant context, validates exact input and commits before returning 202"
+      ]
+    },
+    {
+      "caseId": "A2",
+      "file": "tests/integration/accept.test.ts",
+      "checks": [
+        "concurrent equal submissions retain one identity and one transactional outbox",
+        "a competing alias association cannot leave an orphan accepted sale"
+      ]
+    },
+    {
+      "caseId": "A3",
+      "file": "tests/integration/isolation.test.ts",
+      "checks": [
+        "tenant-scoped reads, histories and pooled reuse cannot cross tenant keys"
+      ]
+    },
+    {
+      "caseId": "A4",
+      "file": "tests/integration/publisher.test.ts",
+      "checks": [
+        "actual process crash at after_accept_commit preserves recoverable outbox",
+        "actual process crash at after_queue_send_before_publish_mark preserves recoverable outbox"
+      ]
+    },
+    {
+      "caseId": "A5",
+      "file": "tests/integration/worker-process.test.ts",
+      "checks": ["worker SIGKILL after receiver commit resumes the same sale"]
+    },
+    {
+      "caseId": "A6",
+      "file": "tests/integration/cli.test.ts",
+      "checks": [
+        "CLI submit, fault, show and idempotent replay exercise the HTTP path",
+        "transient 503 is retried once and accepted input bytes remain unchanged",
+        "five reserved failures exhaust the attempt budget and restart cannot reset the deadline",
+        "Retry-After beyond the deadline records the timing limit rather than five exhausted attempts"
+      ]
+    },
+    {
+      "caseId": "A7",
+      "file": "tests/integration/dlq.test.ts",
+      "checks": [
+        "poison reaches the local DLQ while healthy work completes and collection is durable",
+        "collector SIGKILL after durable quarantine resumes without duplicate records"
+      ]
+    },
+    {
+      "caseId": "A8",
+      "file": "tests/integration/worker-process.test.ts",
+      "checks": ["two actual workers fence a delayed first completion"]
+    },
+    {
+      "caseId": "A9",
+      "file": "tests/integration/recovery.test.ts",
+      "checks": [
+        "correlation history retains bounded error codes and immutable input through recovery",
+        "actual worker restart at before_receiver_http",
+        "actual worker restart at after_attempt_commit_before_queue_delete",
+        "actual worker restart after absolute deadline does not send late HTTP"
+      ]
+    },
+    {
+      "caseId": "A10",
+      "file": "tests/integration/load.test.ts",
+      "checks": [
+        "declared 240 submissions produce 200 effects and an isolated logical restore"
+      ]
+    },
+    {
+      "caseId": "A11",
+      "file": "tests/integration/restore.test.ts",
+      "checks": [
+        "logical restore verifies canonical data, dedupe and grants without changing original"
+      ]
+    }
+  ],
+  "extraFiles": [
+    "tests/integration/delivery.test.ts",
+    "tests/integration/fencing.test.ts",
+    "tests/unit/retry.test.ts",
+    "tests/integration/receiver.test.ts",
+    "tests/integration/replay.test.ts"
+  ]
+}

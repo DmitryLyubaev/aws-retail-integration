@@ -10,6 +10,10 @@ import { startApi } from "./api/server.js";
 import { startReceiver } from "./receiver/server.js";
 import { createQueue } from "./worker/queue.js";
 import { startWorker } from "./worker/runner.js";
+import { runCases } from "./operations/evidence.js";
+import { runLoad } from "./operations/load.js";
+import { backupDataset, restoreDataset } from "./operations/backup.js";
+import { SQSClient } from "@aws-sdk/client-sqs";
 async function main() {
   const config = readConfig(process.argv[2] ?? "");
   if (config.mode === "cli") {
@@ -19,12 +23,69 @@ async function main() {
     });
     return;
   }
-  if (["backup", "load", "evidence"].includes(config.mode))
-    throw new DomainError("operation_not_implemented", 400);
+  if (config.mode === "evidence") {
+    if (config.aws) throw new DomainError("offline_evidence_only", 400);
+    const report = await runCases();
+    process.stdout.write(JSON.stringify(report) + "\n");
+    process.exitCode = report.status === "passed" ? 0 : 1;
+    return;
+  }
   if (!process.env.DATABASE_URL)
     throw new DomainError("database_required", 400);
   const db = openDb(process.env.DATABASE_URL);
   try {
+    if (config.mode === "load") {
+      const report = await runLoad({
+        db,
+        mode: config.aws ? "aws" : "local",
+        apiOrigin: process.env.DEMO_API_ORIGIN ?? "http://127.0.0.1:3000",
+        tokens: JSON.parse(process.env.LOAD_TOKENS ?? "[]"),
+        runId: process.env.SESSION_ID ?? "p14-local",
+      });
+      process.stdout.write(JSON.stringify(report) + "\n");
+      process.exitCode = report.status === "passed" ? 0 : 1;
+      await db.close();
+      return;
+    }
+    if (config.mode === "backup") {
+      if (!process.env.BACKUP_CONFIG_FILE)
+        throw new DomainError("backup_config_required", 400);
+      const input = JSON.parse(
+        await readFile(process.env.BACKUP_CONFIG_FILE, "utf8"),
+      );
+      if (
+        input.mode !== (config.aws ? "aws" : "local") ||
+        input.queueConfig?.mode !== input.mode
+      )
+        throw new DomainError("invalid_backup_mode", 400);
+      const queueClient = new SQSClient({
+        region: config.region,
+        maxAttempts: 1,
+        ...(!config.aws
+          ? {
+              endpoint: input.queueConfig.localEndpoint,
+              credentials: { accessKeyId: "local", secretAccessKey: "local" },
+            }
+          : {}),
+      });
+      try {
+        const options = {
+          ...input,
+          db,
+          databaseUrl: process.env.DATABASE_URL,
+          queueClient,
+        };
+        const report =
+          process.argv[3] === "restore"
+            ? await restoreDataset(options)
+            : await backupDataset(options);
+        process.stdout.write(JSON.stringify(report) + "\n");
+      } finally {
+        queueClient.destroy();
+        await db.close();
+      }
+      return;
+    }
     if (config.mode === "migrate") {
       if (process.env.ROLE_PASSWORDS)
         await provisionRoles(db, JSON.parse(process.env.ROLE_PASSWORDS));

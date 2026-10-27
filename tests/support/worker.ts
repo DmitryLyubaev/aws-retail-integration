@@ -16,6 +16,7 @@ export async function withWorker<T>(
       client: SQSClient;
       appUrl: string;
       receiverUrl: string;
+      maintenanceUrl: string;
     },
   ) => Promise<T>,
 ): Promise<T> {
@@ -48,6 +49,7 @@ export async function withWorker<T>(
             client,
             appUrl: info.appUrl,
             receiverUrl: info.receiverUrl,
+            maintenanceUrl: info.url,
           },
         );
       } finally {

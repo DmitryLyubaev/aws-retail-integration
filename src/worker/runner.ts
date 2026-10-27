@@ -2,6 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { publishOnce } from "./publisher.js";
 import { consumeOnce, type WorkerDeps } from "./consumer.js";
 import { collectOnce } from "./collector.js";
+import { observe } from "../operations/observe.js";
 export function startWorker(deps: WorkerDeps): { close(): Promise<void> } {
   let stopped = false;
   const loop = async (work: () => Promise<unknown>, pause: number) => {
@@ -18,7 +19,10 @@ export function startWorker(deps: WorkerDeps): { close(): Promise<void> } {
     }
   };
   const tasks = [
-    loop(() => publishOnce(deps), 1000),
+    loop(async () => {
+      await publishOnce(deps);
+      await observe(deps.db);
+    }, 1000),
     loop(() => consumeOnce(deps), 50),
     loop(() => collectOnce(deps), 50),
   ];

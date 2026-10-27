@@ -10,6 +10,7 @@ import type {
 import type { Queue, QueueMessage } from "./queue.js";
 import { parseEnvelope } from "./envelope.js";
 import { claimAttempt, finishAttempt } from "../db/attempts.js";
+import { observe, telemetry } from "../operations/observe.js";
 export interface WorkerDeps {
   db: Db;
   queue: Queue;
@@ -158,7 +159,31 @@ async function handle(deps: WorkerDeps, message: QueueMessage): Promise<void> {
     await deps.fault?.("before_receiver_http");
     const outcome = await sendToReceiver(deps, claim);
     await deps.fault?.("after_receiver_io_before_attempt_finish");
-    await finishAttempt(deps.db, claim, outcome, deps.clock.now());
+    const finished = await finishAttempt(
+      deps.db,
+      claim,
+      outcome,
+      deps.clock.now(),
+    );
+    if (finished) {
+      const current = await envelopeStatus(deps.db, ref);
+      telemetry.log({
+        component: "consumer",
+        code: outcome.kind === "success" ? "delivered" : outcome.code,
+        tenantId: claim.tenantId,
+        deliveryId: claim.deliveryId,
+        generation: claim.generation,
+        attemptId: claim.attemptId,
+      });
+      await observe(
+        deps.db,
+        current?.state === "delivered"
+          ? { delivered: 1 }
+          : current?.state === "failed"
+            ? { failed: 1 }
+            : { retry: 1 },
+      );
+    }
     await deps.fault?.("after_attempt_commit_before_queue_delete");
   }
   status = await envelopeStatus(deps.db, ref);

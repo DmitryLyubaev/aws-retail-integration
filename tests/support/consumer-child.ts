@@ -21,7 +21,7 @@ const count = await (
 )({
   db,
   queue,
-  clock: { now: () => new Date() },
+  clock: { now: () => new Date(process.env.CLOCK_NOW ?? Date.now()) },
   receiverOrigin: process.env.RECEIVER_ORIGIN!,
   receiverTokens: new Map(JSON.parse(process.env.RECEIVER_TOKENS!)),
   fault: async (point) => {
