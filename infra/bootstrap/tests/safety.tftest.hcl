@@ -1,6 +1,8 @@
 mock_provider "aws" {
   override_during = plan
   mock_data "aws_caller_identity" { defaults = { account_id = "111122223333" } }
+  mock_resource "aws_s3_bucket" { defaults = { arn = "arn:aws:s3:::p14-example-private-state" } }
+  mock_resource "aws_ecr_repository" { defaults = { arn = "arn:aws:ecr:ap-southeast-2:111122223333:repository/p14-retail-integration" } }
 }
 variables {
   account_id           = "111122223333"
@@ -46,4 +48,32 @@ run "invalid_repository_id" {
   command = plan
   variables { github_repository_id = "not-an-id" }
   expect_failures = [var.github_repository_id]
+}
+run "delivery_resource_dependencies" {
+  command = plan
+  assert {
+    condition = alltrue([for action in ["ec2:CreateSubnet", "ec2:CreateRouteTable", "ec2:CreateSecurityGroup"] : anytrue([
+      for statement in jsondecode(aws_iam_role_policy.delivery.policy).Statement :
+      try(contains(statement.Action, action), false) &&
+      try(statement.Resource == "arn:aws:ec2:ap-southeast-2:111122223333:vpc/*", false) &&
+      try(statement.Condition.StringEquals["aws:ResourceTag/Project"] == "p14", false) &&
+      try(statement.Condition.StringEquals["aws:RequestedRegion"] == "ap-southeast-2", false) &&
+      !can(statement.Condition.StringLike["aws:RequestTag/Project"])
+    ])])
+    error_message = "Dependent VPC authorization must use its existing project tag, not a new resource's request tag."
+  }
+  assert {
+    condition = alltrue([for action in ["s3:TagResource", "s3:UntagResource", "s3:ListTagsForResource", "s3:GetAccelerateConfiguration"] : anytrue([
+      for statement in jsondecode(aws_iam_role_policy.delivery.policy).Statement :
+      contains(statement.Action, action) && try(contains(statement.Resource, "arn:aws:s3:::p14-*"), false)
+    ])])
+    error_message = "The locked provider's bucket tagging and acceleration reads must be authorized only for project buckets."
+  }
+  assert {
+    condition = alltrue([for action in ["logs:TagResource", "logs:UntagResource", "logs:ListTagsForResource"] : anytrue([
+      for statement in jsondecode(aws_iam_role_policy.delivery.policy).Statement :
+      contains(statement.Action, action) && statement.Resource == "arn:aws:logs:ap-southeast-2:111122223333:log-group:/p14/*"
+    ])])
+    error_message = "Log tag operations require the bare project log-group ARN, without the stream suffix."
+  }
 }
