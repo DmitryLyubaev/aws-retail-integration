@@ -32,7 +32,7 @@ resource "aws_lambda_function" "cleanup" {
   source_code_hash               = data.archive_file.cleanup.output_base64sha256
   timeout                        = 180
   memory_size                    = 256
-  reserved_concurrent_executions = 1
+  reserved_concurrent_executions = -1
   environment { variables = { CLEANUP_CONFIG = jsonencode({ sessionId = var.session_id, clusterArn = local.cluster_arn, serviceArns = local.service_arns, dbIdentifier = var.session_id }) } }
   logging_config {
     log_format = "Text"

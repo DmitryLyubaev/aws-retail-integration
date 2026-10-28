@@ -48,6 +48,27 @@ true and `sub_claim_prefix` matches
 repositories use this immutable format; do not disable it to match a legacy
 name-only trust. These IDs are public GitHub metadata, not AWS credentials.
 
+Check the actual regional Lambda limits before planning:
+
+```sh
+aws lambda get-account-settings --region ap-southeast-2 --query '{limits:AccountLimit,usage:AccountUsage}'
+```
+
+The cleanup function uses Lambda's default shared concurrency pool. New accounts
+can have a total limit of ten; reserving one execution would conflict with AWS's
+required unreserved pool. Shared concurrency allows overlapping cleanup attempts.
+There is one scheduled event with bounded retries; a database still deleting or
+an overlapping delete error remains a visible failure for a later retry. The
+independent owner supervisor and full absence verification remain required.
+
+RDS-managed master passwords require `kms:DescribeKey`, including when Secrets
+Manager uses its AWS-managed key. The delivery role grants only that metadata
+action on keys in the approved account and Sydney region. Keep the existing
+AWS-managed encryption keys. Verify the rendered policy's positive and
+wrong-account/region/action cases before any separately approved bootstrap apply.
+See [AWS's managed-password permissions](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html)
+and [Lambda's reservation limits](https://docs.aws.amazon.com/lambda/latest/dg/configuration-concurrency.html).
+
 The dated [cost model](cost-model.md) reserves approximately USD1.04 base, USD5
 planning allowance and USD10 operating limit before tax, without credit offsets.
 Reprice the actual saved plan. No NAT, ALB, interface endpoints, extra database,

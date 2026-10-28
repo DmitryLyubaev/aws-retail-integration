@@ -56,6 +56,10 @@ run "initial_services_stopped" {
     error_message = "Lambda asynchronous retries must also fit within the remaining session window."
   }
   assert {
+    condition     = aws_lambda_function.cleanup.reserved_concurrent_executions == -1
+    error_message = "Cleanup must use the shared concurrency pool; a ten-concurrency account cannot reserve capacity while preserving AWS's unreserved floor."
+  }
+  assert {
     condition     = !strcontains(aws_iam_role_policy.worker.policy, "sqs:*") && strcontains(aws_ecs_task_definition.application.container_definitions, "sslmode=verify-full") && aws_cloudwatch_log_group.session.retention_in_days == 1
     error_message = "Scoped queue access, verified DB TLS and short logs are required."
   }

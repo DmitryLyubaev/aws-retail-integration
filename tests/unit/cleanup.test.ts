@@ -105,3 +105,75 @@ test("cleanup validates database ownership before any service mutation and toler
   assert.equal(result.servicesScaled, 1);
   assert.equal(result.databaseAbsent, true);
 });
+
+test("cleanup can repeat after a successful deletion without deleting the database again", async () => {
+  const { calls, clients } = fake();
+  assert.equal(
+    (await cleanupCostDrivers(config, clients)).databaseAbsent,
+    true,
+  );
+  assert.equal(
+    (await cleanupCostDrivers(config, clients)).databaseAbsent,
+    true,
+  );
+  assert.equal(calls.filter((call) => call === "delete").length, 1);
+});
+
+test("overlapping cleanup reports the deletion race and a later retry confirms absence", async () => {
+  const { clients } = fake({ absent: true });
+  let state: "available" | "deleting" | "absent" = "available";
+  let initialReads = 0;
+  let deleteRequests = 0;
+  let releaseReads!: () => void;
+  const bothInspected = new Promise<void>((resolve) => {
+    releaseReads = resolve;
+  });
+  clients.inspectDatabase = async () => {
+    if (state === "absent") return null;
+    if (state === "available") {
+      initialReads++;
+      if (initialReads === 2) releaseReads();
+      await bothInspected;
+      return { sessionId: config.sessionId, status: "available" };
+    }
+    return { sessionId: config.sessionId, status: "deleting" };
+  };
+  clients.deleteDatabase = async () => {
+    deleteRequests++;
+    if (state === "deleting")
+      throw Object.assign(new Error("Database is already deleting"), {
+        name: "InvalidDBInstanceStateFault",
+      });
+    state = "deleting";
+  };
+  const outcomes = await Promise.allSettled([
+    cleanupCostDrivers(config, clients),
+    cleanupCostDrivers(config, clients),
+  ]);
+  assert.equal(
+    outcomes.every((outcome) => outcome.status === "rejected"),
+    true,
+  );
+  const errors = outcomes.map((outcome) =>
+    outcome.status === "rejected"
+      ? (outcome.reason as { code?: string; name?: string })
+      : {},
+  );
+  assert.equal(
+    errors.some((error) => error.code === "cleanup_incomplete"),
+    true,
+  );
+  assert.equal(
+    errors.some((error) => error.name === "InvalidDBInstanceStateFault"),
+    true,
+  );
+  await assert.rejects(cleanupCostDrivers(config, clients), {
+    code: "cleanup_incomplete",
+  });
+  state = "absent";
+  assert.equal(
+    (await cleanupCostDrivers(config, clients)).databaseAbsent,
+    true,
+  );
+  assert.equal(deleteRequests, 2);
+});

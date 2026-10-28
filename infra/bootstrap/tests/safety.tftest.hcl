@@ -77,3 +77,22 @@ run "delivery_resource_dependencies" {
     error_message = "Log tag operations require the bare project log-group ARN, without the stream suffix."
   }
 }
+run "managed_password_key_metadata" {
+  command = plan
+  assert {
+    condition = length([
+      for statement in jsondecode(aws_iam_role_policy.delivery.policy).Statement : statement
+      if anytrue([for action in statement.Action : startswith(lower(action), "kms:")])
+      ]) == 1 && anytrue([
+      for statement in jsondecode(aws_iam_role_policy.delivery.policy).Statement :
+      length(statement.Action) == 1 && contains(statement.Action, "kms:DescribeKey") &&
+      statement.Resource == "arn:aws:kms:ap-southeast-2:111122223333:key/*" &&
+      try(statement.Condition.StringEquals["aws:RequestedRegion"] == "ap-southeast-2", false)
+    ])
+    error_message = "RDS-managed passwords need only DescribeKey metadata access on keys in the approved account and region."
+  }
+  assert {
+    condition     = length(aws_iam_role_policy.delivery.policy) < 10240
+    error_message = "The rendered delivery policy must remain within the IAM inline role policy size limit."
+  }
+}
