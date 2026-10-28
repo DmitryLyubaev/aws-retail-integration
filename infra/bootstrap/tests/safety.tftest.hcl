@@ -118,11 +118,11 @@ run "provider_metadata_reads" {
     error_message = "The provider's unfiltered RDS read needs db:* within only the approved account and region."
   }
   assert {
-    condition = anytrue([
+    condition = alltrue([for action in ["s3:GetLifecycleConfiguration", "s3:GetReplicationConfiguration"] : anytrue([
       for statement in jsondecode(aws_iam_role_policy.delivery.policy).Statement :
-      contains(statement.Action, "s3:GetLifecycleConfiguration") &&
+      contains(statement.Action, action) &&
       try(contains(statement.Resource, "arn:aws:s3:::p14-*"), false)
-    ])
-    error_message = "The provider reads bucket lifecycle metadata even when this demonstration defines no lifecycle rule."
+    ])])
+    error_message = "The provider reads lifecycle and replication metadata even when this demonstration defines neither feature."
   }
 }

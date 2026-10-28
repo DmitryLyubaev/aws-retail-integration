@@ -65,7 +65,7 @@ resource "aws_iam_role_policy" "delivery" {
   # This owner-only Terraform role is privileged within the named personal demo.
   # Some create/list and ECS Exec APIs have no resource-level authorization.
   policy = jsonencode({ Version = "2012-10-17", Statement = [
-    { Effect = "Allow", Action = ["s3:ListBucket", "s3:GetBucket*", "s3:PutBucket*", "s3:CreateBucket", "s3:DeleteBucket", "s3:DeleteBucketPolicy", "s3:GetEncryptionConfiguration", "s3:PutEncryptionConfiguration", "s3:ListBucketVersions", "s3:TagResource", "s3:UntagResource", "s3:ListTagsForResource", "s3:GetAccelerateConfiguration", "s3:GetLifecycleConfiguration"], Resource = [aws_s3_bucket.state.arn, "arn:aws:s3:::p14-*"] },
+    { Effect = "Allow", Action = ["s3:ListBucket", "s3:GetBucket*", "s3:PutBucket*", "s3:CreateBucket", "s3:DeleteBucket", "s3:DeleteBucketPolicy", "s3:GetEncryptionConfiguration", "s3:PutEncryptionConfiguration", "s3:ListBucketVersions", "s3:TagResource", "s3:UntagResource", "s3:ListTagsForResource", "s3:GetAccelerateConfiguration", "s3:GetLifecycleConfiguration", "s3:GetReplicationConfiguration"], Resource = [aws_s3_bucket.state.arn, "arn:aws:s3:::p14-*"] },
     { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:GetObjectVersion", "s3:DeleteObjectVersion"], Resource = ["${aws_s3_bucket.state.arn}/*", "arn:aws:s3:::p14-*/*"] },
     { Effect = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer", "ecr:DescribeImages", "ecr:BatchDeleteImage"], Resource = aws_ecr_repository.image.arn },
     { Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*" },
