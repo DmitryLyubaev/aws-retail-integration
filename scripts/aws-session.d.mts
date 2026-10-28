@@ -4,6 +4,7 @@ export function responseIsAbsent(
   allowEmptyOutput?: boolean,
 ): boolean;
 export function verifyClosure(config: any): Promise<Record<string, boolean>>;
+export function exportPrivateFailureEvidence(config: any): Promise<void>;
 export function supervisorBinding(config: any): boolean;
 export function readyMatches(request: any, context: any, ready: any): boolean;
 export function sessionTimes(start: number): {

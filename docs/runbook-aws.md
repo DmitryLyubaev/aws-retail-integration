@@ -73,6 +73,8 @@ Run the protected **Publish tested private image** workflow for the exact curren
 main commit, unique `p14-...` session ID and approved UTC start. It checks local
 dispatch before OIDC, verifies STS account, builds/tests/smokes that exact source,
 then pushes its private immutable source tag. Retain the returned manifest digest.
+The redacted publication receipt is copied through `RUNNER_TEMP`, so a container's
+ownership of checkout `results/` cannot prevent its GitHub artifact upload.
 Publication is preparatory: plan/apply never replace the requested image digest.
 One failed image push is not permission for an unbounded rebuild/storage loop.
 
@@ -120,6 +122,10 @@ writes. Launch it in the operator environment:
 node scripts/supervise-cleanup.mjs .local/supervisor.json
 ```
 
+Closure inventory validation uses a fresh STS account observation. The recorded
+`expectedAccount` remains the approved account; an omitted or stale `actualAccount`
+field does not replace that observation.
+
 It writes an encrypted private readiness heartbeat every 30 seconds. Apply requires
 a matching heartbeat no older than 60 seconds. A heartbeat error remains visible
 and does not cancel the absolute cleanup loop. Independently, the AWS hour-four
@@ -165,6 +171,20 @@ copies current backup objects and a bounded log sample to ignored `.local/export
 review any pagination marker and export the remaining required evidence yourself.
 Keep plans/state and Exec/database raw logs out of public CI artifacts.
 
+After a delivery failure with verified account and private configuration, selected
+lifecycle logs and receipts are retained as AES256 objects under
+`evidence/SESSION/SOURCE_COMMIT/GITHUB_RUN_ID/` in the existing private state bucket.
+The public job prints only the bounded retention result and original failure.
+Configuration, plan binaries and state are excluded from this diagnostic upload;
+raw diagnostics never become GitHub artifacts. Retention is best effort and does
+not turn a failed deployment or failed upload into success.
+
+Before emptying the bootstrap bucket, the independent owner cleanup exports that
+exact session/source evidence prefix to
+`.local/export/SESSION/private-delivery/`, with directories mode 0700 and files 0600. An export access/transport failure prevents bootstrap deletion and requires
+owner recovery within the original deadline. Preserve this directory with the
+other private evidence before preparing any redacted publication.
+
 ## Teardown and closure
 
 Begin at hour four even when acceptance fails. After the application window
@@ -201,6 +221,11 @@ Access errors, missing inventory or unfinished deletion remain unverified. Retai
 deadline breach; partial deletion is not full closure. Closure and later billing
 reconciliation must both be reported before claiming the live project complete.
 Do not rerun, enlarge the envelope or raise the budget without a new owner decision.
+
+The exact RDS `DBInstanceAutomatedBackupNotFound` response counts as absence.
+Successful empty CLI output is accepted only for SQS `ListQueues`, using its own
+empty-result predicate. Other empty output, malformed JSON, pagination markers,
+interrupted commands and access errors cannot certify closure.
 
 The independent supervisor persists a private, session/config/account-bound
 session-destruction phase receipt before removing bootstrap resources. Retain

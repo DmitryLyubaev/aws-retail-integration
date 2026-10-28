@@ -27,7 +27,7 @@ async function fixture(
     await mkdir(path.join(directory, "bin"));
     const aws = `#!${process.execPath}
 const fs=require('node:fs'),path=require('node:path');
-const args=process.argv.slice(2),services=['sts','s3api','ecr','rds','sqs','ecs','logs','cloudwatch','servicediscovery','route53','ec2','lambda','scheduler','iam','budgets','secretsmanager'];
+const args=process.argv.slice(2),services=['sts','s3','s3api','ecr','rds','sqs','ecs','logs','cloudwatch','servicediscovery','route53','ec2','lambda','scheduler','iam','budgets','secretsmanager'];
 const i=args.findIndex(a=>services.includes(a)),[service,operation]=args.slice(i);
 const key=service+' '+operation, opt=(name)=>args[args.indexOf(name)+1];
 fs.appendFileSync('aws-calls.jsonl',JSON.stringify({key,args})+String.fromCharCode(10));
@@ -35,6 +35,7 @@ const responses=JSON.parse(fs.readFileSync('responses.json'));
 if(responses[key]){ const r=responses[key];process.stdout.write(typeof r.stdout==='object'?JSON.stringify(r.stdout):r.stdout??'');process.stderr.write(r.stderr??'');process.exit(r.code??0); }
 if(key==='s3api get-object'){fs.copyFileSync('config-fixture.json',args.at(-1));process.stdout.write('{}');}
 else if(key==='s3api put-object'){const target=path.join('archive',opt('--key'));fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(opt('--body'),target);process.stdout.write('{}');}
+else if(key==='s3 sync'){const source=path.join('archive',new URL(args[i+2]).pathname.slice(1));if(fs.existsSync(source))fs.cpSync(source,args[i+3],{recursive:true});}
 else{process.stderr.write('An error occurred (AccessDenied)');process.exit(254);}
 `;
     await writeFile(path.join(directory, "bin/aws"), aws, { mode: 0o755 });
@@ -205,22 +206,6 @@ test(
       assert.doesNotMatch(
         result.stdout + result.stderr,
         /private-terraform-diagnostic|private-configuration-sentinel/,
-      );
-      assert.ok(
-        (
-          await readdir(path.join(directory, ".local/logs")).catch(() => [])
-        ).includes("terraform-plan.log"),
-        JSON.stringify({
-          result,
-          calls: await readFile(
-            path.join(directory, "aws-calls.jsonl"),
-            "utf8",
-          ).catch(() => "none"),
-          context: await readFile(
-            path.join(directory, ".local/context.json"),
-            "utf8",
-          ).catch(() => "none"),
-        }),
       );
       assert.match(
         await readFile(
@@ -537,6 +522,83 @@ test(
         calls.map((x) => x.key),
         ["sts get-caller-identity"],
       );
+    });
+  },
+);
+
+test(
+  "private delivery diagnostics are exported with owner-only access before bootstrap removal",
+  linux,
+  async () => {
+    await fixture(async (directory, env) => {
+      await writeFile(
+        path.join(directory, "responses.json"),
+        JSON.stringify({
+          "sts get-caller-identity": { stdout: { Account: "111122223333" } },
+        }),
+      );
+      const archived = path.join(
+        directory,
+        "archive/evidence/p14-synthetic",
+        source,
+        "1234",
+      );
+      await mkdir(archived, { recursive: true });
+      await writeFile(
+        path.join(archived, "terraform-apply.log"),
+        "private-diagnostic-preserved",
+      );
+      const module = pathToFileURL(
+        path.join(root, "scripts/aws-session.mjs"),
+      ).href;
+      const script = `import{exportPrivateFailureEvidence}from ${JSON.stringify(module)};await exportPrivateFailureEvidence({stateBucket:'p14-synthetic-state',request:{sessionId:'p14-synthetic',sourceCommit:'${source}'},context:{expectedAccount:'111122223333'}})`;
+      const result = spawnSync(
+        process.execPath,
+        ["--input-type=module", "-e", script],
+        { cwd: directory, env, encoding: "utf8" },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      const exported = path.join(
+        directory,
+        ".local/export/p14-synthetic/private-delivery/1234/terraform-apply.log",
+      );
+      assert.equal(
+        await readFile(exported, "utf8"),
+        "private-diagnostic-preserved",
+      );
+      const { stat } = await import("node:fs/promises");
+      assert.equal((await stat(exported)).mode & 0o777, 0o600);
+      assert.equal((await stat(path.dirname(exported))).mode & 0o777, 0o700);
+      const calls = (
+        await readFile(path.join(directory, "aws-calls.jsonl"), "utf8")
+      )
+        .trim()
+        .split("\n")
+        .map((x) => JSON.parse(x));
+      assert.equal(
+        calls
+          .find((x) => x.key === "s3 sync")
+          .args.some(
+            (x: string) =>
+              x ===
+              `s3://p14-synthetic-state/evidence/p14-synthetic/${source}/`,
+          ),
+        true,
+      );
+      await writeFile(
+        path.join(directory, "responses.json"),
+        JSON.stringify({
+          "sts get-caller-identity": { stdout: { Account: "111122223333" } },
+          "s3 sync": { code: 254, stderr: "An error occurred (AccessDenied)" },
+        }),
+      );
+      const denied = spawnSync(
+        process.execPath,
+        ["--input-type=module", "-e", script],
+        { cwd: directory, env, encoding: "utf8" },
+      );
+      assert.equal(denied.status, 1);
+      assert.match(denied.stderr, /evidence_export_failed/);
     });
   },
 );

@@ -1,6 +1,13 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile, writeFile, mkdir, lstat } from "node:fs/promises";
+import {
+  readFile,
+  writeFile,
+  mkdir,
+  lstat,
+  readdir,
+  chmod,
+} from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import {
   validateDispatch,
@@ -1019,6 +1026,37 @@ export function destroyPhases(clients, resumed = false) {
     await clients.bootstrap();
   };
 }
+async function privateExportModes(directory) {
+  await chmod(directory, 0o700);
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const file = directory + "/" + entry.name;
+    if (entry.isSymbolicLink()) throw new Error("evidence_export_symlink");
+    if (entry.isDirectory()) await privateExportModes(file);
+    else await chmod(file, 0o600);
+  }
+}
+export async function exportPrivateFailureEvidence(config) {
+  await identity(config.context.expectedAccount);
+  const { sessionId, sourceCommit } = config.request;
+  if (
+    !/^p14-[a-z0-9][a-z0-9-]{0,23}$/.test(sessionId) ||
+    !/^[a-f0-9]{40}$/.test(sourceCommit) ||
+    !/^p14-[a-z0-9-]+$/.test(config.stateBucket ?? "")
+  )
+    throw new Error("evidence_export_binding");
+  const directory = `.local/export/${sessionId}/private-delivery`;
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await chmod(directory, 0o700);
+  const result = await aws(
+    "s3",
+    "sync",
+    `s3://${config.stateBucket}/evidence/${sessionId}/${sourceCommit}/`,
+    directory,
+  );
+  if (result.code !== 0 && !/\(NoSuchBucket\)/.test(result.stderr))
+    throw new Error("evidence_export_failed");
+  await privateExportModes(directory);
+}
 export async function supervisorClients(config) {
   if (
     !supervisorBinding(config) ||
@@ -1113,6 +1151,7 @@ export async function supervisorClients(config) {
         async bootstrap() {
           if (config.bootstrap) {
             await identity(context.expectedAccount);
+            await exportPrivateFailureEvidence(config);
             await emptyBucket(config.bootstrap.stateBucket);
             const imageResult = await aws(
               "ecr",
