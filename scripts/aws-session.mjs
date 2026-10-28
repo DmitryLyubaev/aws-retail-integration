@@ -748,7 +748,7 @@ async function executePrepared(request, context) {
   return result;
 }
 export async function destroySession(config) {
-  await identity(config.context.expectedAccount);
+  const actualAccount = await identity(config.context.expectedAccount);
   const vars = await jsonFile(config.configFile);
   if (
     sha(await readFile(config.configFile)) !== config.context.configSha256 ||
@@ -766,7 +766,12 @@ export async function destroySession(config) {
     i &&
     !validateDelivery(
       { ...config.request, action: "destroy" },
-      { ...config.context, now: new Date().toISOString(), inventory: i },
+      {
+        ...config.context,
+        actualAccount,
+        now: new Date().toISOString(),
+        inventory: i,
+      },
     ).allowed
   )
     throw new Error("destroy_inventory");

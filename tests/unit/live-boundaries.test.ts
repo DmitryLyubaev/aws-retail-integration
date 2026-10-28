@@ -434,6 +434,124 @@ async function verifyFixture(
   });
 }
 
+async function destroyFixture(
+  directory: string,
+  env: NodeJS.ProcessEnv,
+  responses: Record<string, any>,
+) {
+  const file = path.join(directory, "closure-config.json");
+  const config = JSON.parse(await readFile(file, "utf8"));
+  const variables = JSON.stringify({ session_id: config.sessionId });
+  config.configFile = ".local/session.json";
+  config.stateBucket = "p14-synthetic-state";
+  config.context.configSha256 = createHash("sha256")
+    .update(variables)
+    .digest("hex");
+  await mkdir(path.join(directory, ".local/logs"));
+  await writeFile(path.join(directory, config.configFile), variables);
+  await writeFile(file, JSON.stringify(config));
+  await writeFile(
+    path.join(directory, "responses.json"),
+    JSON.stringify({
+      ...responses,
+      "logs filter-log-events": { stdout: { events: [] } },
+      "s3api list-object-versions": { stdout: {} },
+    }),
+  );
+  await writeFile(
+    path.join(directory, "bin/terraform"),
+    `#!${process.execPath}\nrequire('node:fs').appendFileSync('terraform-calls.jsonl',JSON.stringify(process.argv.slice(2))+'\\n');\n`,
+    { mode: 0o755 },
+  );
+  const module = pathToFileURL(path.join(root, "scripts/aws-session.mjs")).href;
+  const script = `import{readFile}from'node:fs/promises';import{destroySession}from ${JSON.stringify(module)};try{await destroySession(JSON.parse(await readFile('closure-config.json','utf8')));console.log('destroyed')}catch(e){console.error(e.message);process.exitCode=1}`;
+  return spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+    cwd: directory,
+    env,
+    encoding: "utf8",
+  });
+}
+
+for (const account of [undefined, "999900001111"])
+  test(
+    `session destruction uses fresh STS identity with ${account ? "stale" : "missing"} recorded account`,
+    linux,
+    async () => {
+      await fixture(async (directory, env) => {
+        const responses = await closureFixture(directory, account);
+        const result = await destroyFixture(directory, env, responses);
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(result.stdout.trim(), "destroyed");
+        const calls = (
+          await readFile(path.join(directory, "terraform-calls.jsonl"), "utf8")
+        )
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line));
+        assert.equal(
+          calls.filter((args) => args.includes("destroy")).length,
+          1,
+        );
+      });
+    },
+  );
+
+test(
+  "session destruction refuses a different observed AWS account before Terraform",
+  linux,
+  async () => {
+    await fixture(async (directory, env) => {
+      const responses = await closureFixture(directory, "111122223333");
+      responses["sts get-caller-identity"].stdout.Account = "999900001111";
+      const result = await destroyFixture(directory, env, responses);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /account/);
+      assert.equal(
+        (await readdir(directory)).includes("terraform-calls.jsonl"),
+        false,
+      );
+    });
+  },
+);
+
+test(
+  "fresh identity cannot authorize destruction of a different physical inventory",
+  linux,
+  async () => {
+    await fixture(async (directory, env) => {
+      const responses = await closureFixture(directory);
+      const file = path.join(directory, ".local/inventory.json");
+      const inventory = JSON.parse(await readFile(file, "utf8"));
+      inventory.serviceArns[0] =
+        "arn:aws:ecs:ap-southeast-2:111122223333:service/p14-other/p14-other-application";
+      await writeFile(file, JSON.stringify(inventory));
+      const result = await destroyFixture(directory, env, responses);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /destroy_inventory/);
+      const calls = (
+        await readFile(path.join(directory, "terraform-calls.jsonl"), "utf8")
+      )
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      assert.equal(
+        calls.some((args) => args.includes("destroy")),
+        false,
+      );
+      const awsCalls = (
+        await readFile(path.join(directory, "aws-calls.jsonl"), "utf8")
+      )
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      assert.equal(
+        awsCalls.some((call) => call.key === "s3 sync"),
+        false,
+      );
+    });
+  },
+);
+
 test(
   "partial-inventory closure uses fresh STS identity instead of a missing or stale recorded account",
   linux,
