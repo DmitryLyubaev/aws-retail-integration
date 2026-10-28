@@ -1,0 +1,356 @@
+{
+  "schemaVersion": 1,
+  "kind": "owner-recorded bounded synthetic AWS demonstration",
+  "dateBrisbane": "2026-10-29",
+  "samples": 1,
+  "deployedSourceCommit": "329ff16c9847fee507323080c67bf54ed3e1a7de",
+  "imageDigest": "sha256:58561a2c0a14343ed5dd7354aae3ae5756d8b8c0285ee5f5654b324b9103d90b",
+  "cleanupCorrectionCommit": "a5ef86a59762d168af1ad1d310d54e11a25f2c4d",
+  "cleanupCorrectionRedeployed": false,
+  "workflows": {
+    "offline": 40778374515,
+    "privateImage": 40779349794,
+    "plan": 40780231519,
+    "apply": 40780606308
+  },
+  "runtime": {
+    "node": "24.22.1",
+    "rdsPostgreSQL": "17.9",
+    "rdsCA": "rds-ca-rsa2048-g1",
+    "postgresTools": "17.11",
+    "applicationAndWorkerTasks": 2,
+    "migrationExit": 0,
+    "seedExit": 0,
+    "allTaskImagesMatched": true,
+    "RDSPrivateEncrypted": true
+  },
+  "acceptance": {
+    "A1": {
+      "status": "passed",
+      "validAccepted": true,
+      "invalidRejectedWithoutAcceptedWork": true,
+      "receiverEffects": 1,
+      "deliveryId": "f0bfb051-c18f-4415-aec2-f4c1f617c0bb"
+    },
+    "A2": {
+      "status": "passed",
+      "simultaneousDuplicates": 10,
+      "effects": 1,
+      "changedSaleAndEventConflict409": true
+    },
+    "A3": {
+      "status": "passed",
+      "independentTenantEffects": 2,
+      "crossTenantReadAndReplay404": true,
+      "submitOnlyCredentialReadAndReplay403": true
+    },
+    "A4": [
+      {
+        "caseId": "A4",
+        "name": "outbox-commit",
+        "deliveryId": "2435f1c0-c0b6-4fd1-90ba-979a240859a5",
+        "actualPublisherSIGKILL": true,
+        "restarted": true,
+        "rawDigestUnchanged": true,
+        "state": "delivered",
+        "leaseExpiryControl": "none",
+        "independentReceiverEffectCount": 1,
+        "receiverEffectIndependentCheck": "passed"
+      },
+      {
+        "caseId": "A4",
+        "name": "outbox-send",
+        "deliveryId": "da84da23-4f66-4c8a-9124-a4956909edfc",
+        "actualPublisherSIGKILL": true,
+        "restarted": true,
+        "rawDigestUnchanged": true,
+        "state": "delivered",
+        "leaseExpiryControl": "SQL lease expiry explicitly injected",
+        "independentReceiverEffectCount": 1,
+        "receiverEffectIndependentCheck": "passed"
+      }
+    ],
+    "A5": [
+      {
+        "caseId": "A5",
+        "deliveryId": "319b1bfc-5d1b-43be-94c8-9526116e9c75",
+        "actualWorkerSIGKILL": true,
+        "twoWorkerContention": false,
+        "staleCompletionFenced": false,
+        "rawDigestUnchanged": true,
+        "leaseExpiryControl": "SQL lease expiry explicitly injected",
+        "state": "delivered",
+        "receiverEffectIndependentCheck": "passed",
+        "independentReceiverEffectCount": 1
+      }
+    ],
+    "A6": {
+      "transient": {
+        "status": "passed",
+        "attempts": 2,
+        "effects": 1,
+        "deliveryId": "a27c061b-81ec-4f98-a2d9-7b73502b3971"
+      },
+      "replay": {
+        "status": "passed",
+        "permanentFailure422": true,
+        "idempotentReplay": true,
+        "generation": 2,
+        "effects": 1,
+        "originalHashesUnchanged": true
+      }
+    },
+    "A7": {
+      "status": "passed",
+      "actualReceiveCounts": [1, 2, 3, 4, 5],
+      "realRedriveObserved": true,
+      "actualAlarmTransition": true,
+      "alarmUpdatedAt": "2026-10-29T08:57:35.634000+10:00",
+      "quarantinePassed": true,
+      "healthySaleDelivered": true,
+      "noForcedAlarmState": true
+    },
+    "A8": [
+      {
+        "caseId": "A8",
+        "deliveryId": "abb50552-f3c8-4a98-bce5-94e940d754f7",
+        "actualWorkerSIGKILL": false,
+        "twoWorkerContention": true,
+        "staleCompletionFenced": true,
+        "rawDigestUnchanged": true,
+        "leaseExpiryControl": "SQL lease expiry explicitly injected",
+        "state": "delivered",
+        "receiverEffectIndependentCheck": "passed",
+        "independentReceiverEffectCount": 1
+      }
+    ],
+    "A9": {
+      "actualCloudWatchQueryPassed": true,
+      "correlationRows": 3,
+      "bytesScanned": 149777.0
+    },
+    "A10": {
+      "mode": "aws",
+      "runId": "p14-20261028-222102-624b",
+      "at": "2026-10-28T22:48:31.844Z",
+      "brisbane": "29/10/2026, 08:48:31",
+      "configSha256": "b3512ba7b1d40fda20e9b1b310f70db9715c2c577cee5ef5714980c8fb77ad50",
+      "datasetSha256": "d6a3c16726d0324073b6ec5c1ecf8cb9e11dcd05410a7c1460c51b8bbc94a8c5",
+      "status": "passed",
+      "submissionCount": 240,
+      "uniqueReceiverEffects": 200,
+      "failures": 0,
+      "retries": 0,
+      "achievedPerSecond": 5.0198136068324715,
+      "apiP50Ms": 17.635381999996753,
+      "apiP95Ms": 37.38622600000235,
+      "endToEndP50Ms": 691,
+      "endToEndP95Ms": 1181,
+      "drainMs": 161.73674000000028,
+      "durationMs": 47972.287625,
+      "cpuUserMs": 753.946,
+      "cpuSystemMs": 47.496,
+      "rssBytes": 99749888,
+      "dbConnections": 10,
+      "sourceCommit": "329ff16c9847fee507323080c67bf54ed3e1a7de",
+      "imageDigest": "sha256:58561a2c0a14343ed5dd7354aae3ae5756d8b8c0285ee5f5654b324b9103d90b",
+      "driverLocation": "ECS API container, loopback HTTP, owner-only SQL observation",
+      "samples": 1
+    },
+    "A11": {
+      "status": "passed",
+      "backupBytes": 177848,
+      "dumpSHA256": "186d624da645f5b892dca7725881d3508f16d2a565830de5c924b7ffe305b4f2",
+      "canonicalDatasetSHA256": "af594fd77cf55df8c079e7b1359475a1fa2615348e237e36ddcb60ba8824bdc0",
+      "counts": {
+        "app.attempts": 215,
+        "app.audit": 850,
+        "app.credentials": 2,
+        "app.event_aliases": 210,
+        "app.events": 210,
+        "app.generations": 211,
+        "app.outbox": 211,
+        "app.quarantine": 1,
+        "app.replay_requests": 1,
+        "app.schema_migrations": 3,
+        "app.tenants": 2,
+        "receiver.credentials": 4,
+        "receiver.faults": 4,
+        "receiver.receipts": 210,
+        "receiver.sales": 210,
+        "receiver.tenants": 2
+      },
+      "S3AES256AndDownloadedHashVerified": true,
+      "sourceAndRestoreQueuesDistinct": true,
+      "originalDatasetUnchanged": true,
+      "restrictedRuntimeRoleConnections": [
+        {
+          "application_name": "p14-restore-application-api",
+          "usename": "p14_app"
+        },
+        {
+          "application_name": "p14-restore-application-receiver",
+          "usename": "p14_receiver"
+        },
+        {
+          "application_name": "p14-restore-worker-worker",
+          "usename": "p14_app"
+        }
+      ],
+      "knownSaleResubmissionDedupeAndTenantIsolation": true,
+      "temporaryPolicyQueuesTasksAndDatabaseRemoved": true
+    },
+    "A12": {
+      "status": "passed_with_owner_recovery",
+      "checks": {
+        "compute": true,
+        "database": true,
+        "queues": true,
+        "buckets": true,
+        "secrets": true,
+        "logs": true,
+        "alarms": true,
+        "discovery": true,
+        "network": true,
+        "cleanup": true,
+        "iam": true,
+        "bootstrap": true
+      },
+      "firstVerifiedClosureAtUTC": "2026-10-28T23:36:42.423Z",
+      "independentRecheckAtUTC": "2026-10-28T23:42:32.556849+00:00",
+      "bootstrapManagedInstances": 0,
+      "ownedTaskDefinitionMetadata": {
+        "ACTIVE": 0,
+        "INACTIVE": 0,
+        "DELETE_IN_PROGRESS": 7
+      },
+      "ownerProcessesAndTunnelsStopped": true
+    }
+  },
+  "loadWindowMetrics": {
+    "sourceCommit": "329ff16c9847fee507323080c67bf54ed3e1a7de",
+    "sessionId": "p14-20261028-222102-624b",
+    "loadWindowStartUTC": "2026-10-28T22:47:00+00:00",
+    "loadWindowEndUTC": "2026-10-28T22:49:00+00:00",
+    "periodSeconds": 60,
+    "samples": 1,
+    "limitations": "Minute aggregates overlap the 48-second load sample and include adjacent seconds; unavailable five-minute credit data is not inferred as zero.",
+    "metrics": {
+      "applicationcpu": {
+        "status": "Complete",
+        "timestamps": [
+          "2026-10-29T08:48:00+10:00",
+          "2026-10-29T08:47:00+10:00"
+        ],
+        "values": [9.022969262984892, 9.43696147451798],
+        "min": 9.022969262984892,
+        "max": 9.43696147451798
+      },
+      "applicationmemory": {
+        "status": "Complete",
+        "timestamps": [
+          "2026-10-29T08:48:00+10:00",
+          "2026-10-29T08:47:00+10:00"
+        ],
+        "values": [18.033854166666668, 15.397135416666666],
+        "min": 15.397135416666666,
+        "max": 18.033854166666668
+      },
+      "workercpu": {
+        "status": "Complete",
+        "timestamps": [
+          "2026-10-29T08:48:00+10:00",
+          "2026-10-29T08:47:00+10:00"
+        ],
+        "values": [7.347178955872853, 7.749797701835632],
+        "min": 7.347178955872853,
+        "max": 7.749797701835632
+      },
+      "workermemory": {
+        "status": "Complete",
+        "timestamps": [
+          "2026-10-29T08:48:00+10:00",
+          "2026-10-29T08:47:00+10:00"
+        ],
+        "values": [14.680989583333334, 13.151041666666666],
+        "min": 13.151041666666666,
+        "max": 14.680989583333334
+      },
+      "rdscpu": {
+        "status": "Complete",
+        "timestamps": [
+          "2026-10-29T08:48:00+10:00",
+          "2026-10-29T08:47:00+10:00"
+        ],
+        "values": [6.216873895796526, 4.633487782926098],
+        "min": 4.633487782926098,
+        "max": 6.216873895796526
+      },
+      "rdsmemory": {
+        "status": "Complete",
+        "timestamps": [
+          "2026-10-29T08:48:00+10:00",
+          "2026-10-29T08:47:00+10:00"
+        ],
+        "values": [192696320.0, 209088512.0],
+        "min": 192696320.0,
+        "max": 209088512.0
+      },
+      "rdsconnections": {
+        "status": "Complete",
+        "timestamps": [
+          "2026-10-29T08:48:00+10:00",
+          "2026-10-29T08:47:00+10:00"
+        ],
+        "values": [9.0, 1.0],
+        "min": 1.0,
+        "max": 9.0
+      },
+      "rdscredits": {
+        "status": "Complete",
+        "timestamps": [],
+        "values": [],
+        "min": null,
+        "max": null
+      },
+      "rdschargedcredits": {
+        "status": "Complete",
+        "timestamps": [],
+        "values": [],
+        "min": null,
+        "max": null
+      }
+    }
+  },
+  "window": {
+    "sessionStart": "2026-10-28T22:21:02Z",
+    "originalCleanupAt": "2026-10-29T02:21:02Z",
+    "sessionEnd": "2026-10-29T04:21:02Z",
+    "closedBeforeOriginalCleanup": true
+  },
+  "cost": {
+    "planningAllowanceUSD": 5,
+    "cumulativeGrossPreTaxLimitUSD": 10,
+    "priorAttemptsIncluded": true,
+    "creditsOffset": false,
+    "billingReconciled": false,
+    "settledGrossCostUSD": null
+  },
+  "limits": [
+    "One synthetic sample, two tenants and one small Single-AZ RDS instance.",
+    "Crash/race tests used actual child process kills in an ECS task and explicit SQL lease-expiry injections.",
+    "Load ran through authenticated loopback HTTP within AWS. Driver process CPU/RSS are separate from minute-aggregate ECS/RDS metrics.",
+    "Logical restore used the same RDS server, two new empty queues and temporary API/worker tasks. It does not establish PITR or regional recovery.",
+    "The scheduled hour-four fallback was configured but did not fire because owner recovery closed the session earlier. No six-hour soak or protected hosted-destroy workflow result is claimed.",
+    "An inventory guard discarded fresh STS identity; owner recovery supplied the verified account. The separate cleanup code correction passed missing/stale/wrong-account and wrong-inventory regressions.",
+    "Seven owned ECS task-definition metadata entries were DELETE_IN_PROGRESS at the last check; ACTIVE and INACTIVE counts were zero. AWS-managed metadata retention remains.",
+    "Final gross billing remains unsettled. Raw plans, state, credentials, logs and dumps remain private.",
+    "The design A1-A12 observations were exercised; the separate 47-check local suite includes additional fault permutations not all repeated on AWS."
+  ],
+  "operatorCorrections": [
+    "Corrected the API forwarding document for loopback access; the first transport failure accepted no work.",
+    "Corrected restore policy-simulation request formatting before any permission grant or data restore.",
+    "Corrected local PostgreSQL container UID/GID after a dump finalization failure; retained the failed dump and removed its temporary resources.",
+    "Initialized the bootstrap provider directory used by the owner supervisor before completing teardown."
+  ]
+}

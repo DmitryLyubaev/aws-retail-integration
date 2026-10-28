@@ -91,11 +91,17 @@ and [verification record](docs/verification.md).
 
 ## AWS status and scope
 
-Terraform and delivery/cleanup definitions are verified offline with mocked
-providers. Hosted offline CI results are linked above. AWS deployment, service access on the account's plan,
-CloudWatch acceptance, actual charges and teardown remain unverified.
-[The AWS runbook](docs/runbook-aws.md) contains the separate owner approval gates.
-There is no automatic paid deployment or public publication.
+The [29 October 2026 live report](docs/live-report.md) records one synthetic AWS
+sample: 240 submissions produced 200 receiver effects with zero errors/retries,
+5.02 submissions/second and 37.4 ms API p95. Real SQS redrive, a CloudWatch alarm
+transition, crash/replay/fencing checks and an isolated logical restore passed.
+Owned teardown required recovery and passed an independent twelve-category
+recheck. Settled gross billing remains pending. Measurements and limits are
+separate from the [offline report](docs/offline-report.md).
+
+[The AWS runbook](docs/runbook-aws.md) retains the bounded owner approval and
+cleanup contract. Hosted offline CI runs on pushes; paid deployment remains an
+explicit protected workflow action.
 
 This is a personal synthetic learning/CV demonstration. It excludes real payments,
 customer data, an accounting ledger, production availability promises and commercial

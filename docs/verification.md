@@ -1,5 +1,18 @@
 # Verification record
 
+The [29 October live report](live-report.md) and its curated JSON record actual
+AWS delivery, fault/load/restore observations and owner-recovered teardown on
+deployed source `329ff16`. The later cleanup identity correction `a5ef86a` has
+four boundary regressions, with missing/stale recorded accounts observed RED
+before the fix and all four GREEN afterward. The complete unit suite passed
+80/80. The full Linux `npm run check` passed format, strict type checking, build
+and 133 tests, with zero failures and one intentional separate-image profile skip.
+The deployed source's separate nine-mode image check passed in hosted CI; the
+final published source is checked again by hosted offline CI. Final gross
+billing remains pending.
+
+## Historical offline milestone, 27 October 2026
+
 Final offline verification passed on 27 October 2026 against review-fix
 commit `0467062437273f582321bea698f72a0c1a7a6b73`. The ordinary suite ran 104 tests:
 103 passed and the one Docker-socket image profile was intentionally skipped there.
@@ -66,9 +79,10 @@ as the checkout UID/GID and supplies the Docker socket group for the image test.
 Private artifact modes remain unchanged. An isolated Linux ownership probe reproduced
 the root-writer permission failure and passed with the checkout-owner writer.
 
-Not run: real AWS plan/apply, identity/OIDC setup, Free plan topology
-availability, ECS/RDS/SQS/CloudWatch acceptance, actual charges or verified teardown.
-Workflow files, mocks and an account registration do not establish those results.
+At that historical offline milestone, real AWS delivery, acceptance and teardown
+had not run. The later live report records those observations separately;
+workflow files and mocked tests alone do not establish them. Settled actual
+charges remain unverified.
 
 Final review corrections preserve raw CLI bytes, pass the configured CA path to
 PostgreSQL backup/restore subprocesses, finalize in-flight attempts on publish
@@ -82,4 +96,4 @@ the separate closure probes remain required.
 Deferred minor findings: the failed metric omits some terminal transitions outside
 the consumer, so SQL history is authoritative; interactive CLI examples lack a
 complete provisioning/environment recipe, while the automated demo is runnable.
-Neither is a new production requirement. Live AWS results remain unverified.
+Neither is a new production requirement. Later live AWS observations are linked above.

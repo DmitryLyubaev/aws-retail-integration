@@ -4,6 +4,8 @@ This document is a future execution contract. Offline implementation approval
 does not authorize AWS provisioning, identity/security changes, a Paid plan
 upgrade, public repository creation/push or hosted execution. A live run requires
 the owner to approve those concrete actions and their costed saved plans first.
+An owner may explicitly delegate protected-environment review clicks for a bounded
+test session. Keep the required-reviewer and main-only protections in place.
 
 ## Readiness and ownership
 
@@ -121,8 +123,19 @@ environment, account, region, source, image, configuration, plan hash and deadli
 Before action `apply`, start the independent local supervisor under the owner's
 short-lived profile, which must survive deletion of the CI delivery role. Keep
 its private terminal and credential refresh available until closure. Build local
-dependencies, compiled sources and cleanup first. Create `.local/supervisor.json`
-from the reviewed plan receipt and configuration with these fields:
+dependencies, compiled sources and cleanup first.
+
+Initialize the bootstrap provider directory used by that actual supervisor
+environment. When preparation used a separate `TF_DATA_DIR`, prepare the default
+bootstrap directory too before billing work begins:
+
+```sh
+terraform -chdir=infra/bootstrap init -backend=false -input=false -lockfile=readonly
+terraform -chdir=infra/bootstrap validate
+```
+
+Create `.local/supervisor.json` from the reviewed plan receipt and configuration
+with these fields:
 
 - `sessionId`, `cleanupAt`, `sessionEnd` copied unchanged from the receipt;
 - `request`: `action: apply`, source/session/image, exact private `planKey` and
@@ -146,6 +159,8 @@ node scripts/supervise-cleanup.mjs .local/supervisor.json
 Closure inventory validation uses a fresh STS account observation. The recorded
 `expectedAccount` remains the approved account; an omitted or stale `actualAccount`
 field does not replace that observation.
+Session destruction uses the same fresh observation for its physical-inventory
+guard. It must not rely on a missing or stale recorded account.
 
 It writes an encrypted private readiness heartbeat every 30 seconds. Apply requires
 a matching heartbeat no older than 60 seconds. A heartbeat error remains visible
