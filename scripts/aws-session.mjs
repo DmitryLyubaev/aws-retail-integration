@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, lstat } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import {
   validateDispatch,
@@ -395,6 +395,92 @@ async function migrate(config, mode) {
 async function execute() {
   const request = await jsonFile(".local/request.json"),
     context = await jsonFile(".local/context.json");
+  context.privateConfigVerified = false;
+  delete context.actualAccount;
+  try {
+    return await executePrepared(request, context);
+  } catch (error) {
+    const evidence = await retainFailureEvidence(request, context).catch(
+      () => ({
+        retained: false,
+        code: "capture_failed",
+      }),
+    );
+    process.stderr.write(
+      JSON.stringify({ code: "private_failure_evidence", ...evidence }) + "\n",
+    );
+    throw error;
+  }
+}
+async function retainFailureEvidence(request, context) {
+  const bucket = process.env.STATE_BUCKET,
+    runId = process.env.GITHUB_RUN_ID ?? "owner";
+  if (
+    !context.privateConfigVerified ||
+    context.actualAccount !== context.expectedAccount ||
+    !/^p14-[a-z0-9-]+$/.test(bucket ?? "") ||
+    !/^(?:[0-9]{1,20}|owner)$/.test(runId)
+  )
+    return { retained: false, code: "unverified_binding" };
+  const paths = [
+    ...[
+      "terraform-init",
+      "terraform-plan",
+      "terraform-apply",
+      "terraform-destroy",
+      "image-pull",
+    ].map((name) => `.local/logs/${name}.log`),
+    ...[
+      "delivery-summary",
+      "migrate-receipt",
+      "seed-receipt",
+      "plan-receipt",
+      "inventory",
+    ].map((name) => `.local/${name}.json`),
+  ];
+  const deadline = Date.now() + 60000;
+  let files = 0;
+  for (const file of paths) {
+    let stat;
+    try {
+      stat = await lstat(file);
+    } catch (error) {
+      if (error.code === "ENOENT") continue;
+      throw error;
+    }
+    if (
+      !stat.isFile() ||
+      stat.size > 16 * 1024 * 1024 ||
+      Date.now() >= deadline
+    )
+      return { retained: false, code: "capture_limit", files };
+    const name = file.split("/").at(-1);
+    const result = await command(
+      "aws",
+      [
+        "--no-cli-pager",
+        "--region",
+        context.region,
+        "s3api",
+        "put-object",
+        "--bucket",
+        bucket,
+        "--key",
+        `evidence/${request.sessionId}/${request.sourceCommit}/${runId}/${name}`,
+        "--body",
+        file,
+        "--server-side-encryption",
+        "AES256",
+      ],
+      { timeout: Math.min(15000, deadline - Date.now()) },
+    );
+    if (result.code !== 0)
+      return { retained: false, code: "upload_failed", files };
+    files++;
+  }
+  return { retained: files > 0, files };
+}
+async function executePrepared(request, context) {
   context.now = new Date().toISOString();
   const local = validateDispatch(request, context);
   if (!local.allowed) throw new Error(local.code);
@@ -429,6 +515,8 @@ async function execute() {
     session_end: context.sessionEnd,
   }))
     if (vars[key] !== value) throw new Error("config_binding");
+  if (vars.state_bucket !== stateBucket) throw new Error("state_binding");
+  context.privateConfigVerified = true;
   context.inventory = inventory(request, context);
   if (request.action !== "destroy")
     await publishedImage(request, context, vars.image_repository_url);
@@ -461,7 +549,6 @@ async function execute() {
     configFile: ".local/session.json",
     inventoryFile: ".local/inventory.json",
   };
-  if (vars.state_bucket !== stateBucket) throw new Error("state_binding");
   await tfInit(config);
   const clients = {
     now: () => new Date().toISOString(),

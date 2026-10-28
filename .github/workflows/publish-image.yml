@@ -51,12 +51,11 @@ jobs:
         run: node scripts/aws-session.mjs publish
       - name: Retain the immutable manifest receipt
         run: |
-          mkdir -p results
-          cp .local/published-image.json results/image-publication.json
+          cp .local/published-image.json "$RUNNER_TEMP/p14-image-publication.json"
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
         with:
           name: image-publication
-          path: results/image-publication.json
+          path: ${{ runner.temp }}/p14-image-publication.json
           if-no-files-found: error
           retention-days: 7
       - name: Remove local test resources
