@@ -744,19 +744,42 @@ export async function destroySession(config) {
     ".local/logs/terraform-destroy.log",
   );
 }
-export function responseIsAbsent(r, empty) {
+export function responseIsAbsent(r, empty, allowEmptyOutput = false) {
+  if (r.code === null) return false;
   if (r.code !== 0)
-    return /\((?:404|ResourceNotFoundException|DBInstanceNotFound|DBInstanceNotFoundFault|AWS.SimpleQueueService.NonExistentQueue|QueueDoesNotExist|NoSuchEntity|NoSuchBucket|NoSuchHostedZone|InvalidVpcID.NotFound|RepositoryNotFoundException|NamespaceNotFound|ServiceNotFound|NotFoundException)\)/.test(
+    return /\((?:404|ResourceNotFoundException|DBInstanceNotFound|DBInstanceNotFoundFault|DBInstanceAutomatedBackupNotFound|AWS.SimpleQueueService.NonExistentQueue|QueueDoesNotExist|NoSuchEntity|NoSuchBucket|NoSuchHostedZone|InvalidVpcID.NotFound|RepositoryNotFoundException|NamespaceNotFound|ServiceNotFound|NotFoundException)\)/.test(
       r.stderr,
     );
   try {
-    return empty(JSON.parse(r.stdout));
+    const value = JSON.parse(
+      allowEmptyOutput && !r.stdout.trim() ? "{}" : r.stdout,
+    );
+    if (
+      !value ||
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      value.IsTruncated === true ||
+      [
+        "NextToken",
+        "nextToken",
+        "Marker",
+        "marker",
+        "NextMarker",
+        "NextContinuationToken",
+      ].some((key) => value[key])
+    )
+      return false;
+    return empty(value);
   } catch {
     return false;
   }
 }
 async function absence(args, empty) {
-  return responseIsAbsent(await aws(...args, "--output", "json"), empty);
+  return responseIsAbsent(
+    await aws(...args, "--output", "json"),
+    empty,
+    args[0] === "sqs" && args[1] === "list-queues",
+  );
 }
 export function supervisorBinding(config) {
   return (
@@ -782,7 +805,7 @@ export function readyMatches(request, context, ready) {
   return Number.isFinite(age) && age >= 0 && age <= 60000;
 }
 export async function verifyClosure(config) {
-  await identity(config.context.expectedAccount);
+  const actualAccount = await identity(config.context.expectedAccount);
   let physical;
   try {
     physical = await jsonFile(config.inventoryFile ?? ".local/inventory.json");
@@ -793,7 +816,12 @@ export async function verifyClosure(config) {
     physical &&
     !validateDelivery(
       { ...config.request, action: "destroy" },
-      { ...config.context, now: new Date().toISOString(), inventory: physical },
+      {
+        ...config.context,
+        actualAccount,
+        now: new Date().toISOString(),
+        inventory: physical,
+      },
     ).allowed
   )
     return {};

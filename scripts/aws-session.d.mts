@@ -1,7 +1,9 @@
 export function responseIsAbsent(
   result: { code: number | null; stdout: string; stderr: string },
   empty: (value: any) => boolean,
+  allowEmptyOutput?: boolean,
 ): boolean;
+export function verifyClosure(config: any): Promise<Record<string, boolean>>;
 export function supervisorBinding(config: any): boolean;
 export function readyMatches(request: any, context: any, ready: any): boolean;
 export function sessionTimes(start: number): {

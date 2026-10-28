@@ -184,6 +184,60 @@ test("apply requires a fresh supervisor heartbeat bound to this plan and account
       false,
     );
 });
+
+test("automated RDS backup absence and the known SQS empty response are recognized", () => {
+  assert.equal(
+    responseIsAbsent(
+      {
+        code: 254,
+        stdout: "",
+        stderr:
+          "An error occurred (DBInstanceAutomatedBackupNotFound) when calling DescribeDBInstanceAutomatedBackups",
+      },
+      () => false,
+    ),
+    true,
+  );
+  assert.equal(
+    responseIsAbsent(
+      { code: 0, stdout: "", stderr: "" },
+      (r) => !r.QueueUrls?.length,
+      true,
+    ),
+    true,
+  );
+  assert.equal(
+    responseIsAbsent({ code: 0, stdout: "", stderr: "" }, () => true),
+    false,
+  );
+});
+
+test("pagination and interrupted commands cannot certify absence", () => {
+  for (const value of [
+    { QueueUrls: [], NextToken: "more" },
+    { items: [], IsTruncated: true },
+    { items: [], Marker: "more" },
+  ])
+    assert.equal(
+      responseIsAbsent(
+        { code: 0, stdout: JSON.stringify(value), stderr: "" },
+        () => true,
+      ),
+      false,
+    );
+  assert.equal(
+    responseIsAbsent(
+      {
+        code: null,
+        stdout: "",
+        stderr:
+          "An error occurred (NoSuchBucket) before transport interruption",
+      },
+      () => true,
+    ),
+    false,
+  );
+});
 test("live supervisor cannot replace the plan-bound session or cleanup deadlines", () => {
   const config = {
     sessionId: "p14-synthetic",

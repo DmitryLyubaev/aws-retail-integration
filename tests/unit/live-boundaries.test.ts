@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 
 const root = process.cwd();
 const linux = { skip: process.platform !== "linux" };
@@ -26,7 +27,7 @@ async function fixture(
     await mkdir(path.join(directory, "bin"));
     const aws = `#!${process.execPath}
 const fs=require('node:fs'),path=require('node:path');
-const args=process.argv.slice(2),services=['sts','s3api','ecr','rds','sqs','ecs','logs','cloudwatch','servicediscovery','route53','ec2','lambda','scheduler','iam','budgets'];
+const args=process.argv.slice(2),services=['sts','s3api','ecr','rds','sqs','ecs','logs','cloudwatch','servicediscovery','route53','ec2','lambda','scheduler','iam','budgets','secretsmanager'];
 const i=args.findIndex(a=>services.includes(a)),[service,operation]=args.slice(i);
 const key=service+' '+operation, opt=(name)=>args[args.indexOf(name)+1];
 fs.appendFileSync('aws-calls.jsonl',JSON.stringify({key,args})+String.fromCharCode(10));
@@ -343,5 +344,199 @@ test(
         );
       });
     }
+  },
+);
+
+async function closureFixture(directory: string, actualAccount?: string) {
+  const session = "p14-synthetic",
+    account = "111122223333";
+  const cluster = `arn:aws:ecs:ap-southeast-2:${account}:cluster/${session}`;
+  const config = {
+    sessionId: session,
+    request: {
+      action: "apply",
+      sessionId: session,
+      sourceCommit: source,
+      imageDigest: digest,
+    },
+    context: {
+      eventName: "workflow_dispatch",
+      ref: "refs/heads/main",
+      repository: "example-owner/aws-retail-integration",
+      approvedRepository: "example-owner/aws-retail-integration",
+      environment: "aws-demo",
+      expectedAccount: account,
+      actualAccount,
+      region: "ap-southeast-2",
+      sourceCommit: source,
+      cleanupAt: "2030-01-01T04:00:00Z",
+      sessionEnd: "2030-01-01T06:00:00Z",
+    },
+    bootstrap: {
+      stateBucket: "p14-synthetic-state",
+      oidcProviderArn: `arn:aws:iam::${account}:oidc-provider/token.actions.githubusercontent.com`,
+    },
+  };
+  await mkdir(path.join(directory, ".local"));
+  await writeFile(
+    path.join(directory, ".local/inventory.json"),
+    JSON.stringify({
+      sessionId: session,
+      sourceCommit: source,
+      imageDigest: digest,
+      accountId: account,
+      region: "ap-southeast-2",
+      clusterArn: cluster,
+      serviceArns: ["application", "worker"].map(
+        (n) =>
+          `arn:aws:ecs:ap-southeast-2:${account}:service/${session}/${session}-${n}`,
+      ),
+      dbIdentifier: session,
+      vpcId: "vpc-synthetic",
+    }),
+  );
+  const absent = (code: string) => ({
+    code: 254,
+    stderr: `An error occurred (${code}) when calling the operation`,
+  });
+  const responses: Record<string, any> = {
+    "sts get-caller-identity": { stdout: { Account: account } },
+    "ecs describe-clusters": { stdout: { clusters: [] } },
+    "rds describe-db-instances": absent("DBInstanceNotFound"),
+    "rds describe-db-snapshots": { stdout: { DBSnapshots: [] } },
+    "rds describe-db-instance-automated-backups": {
+      stdout: { DBInstanceAutomatedBackups: [] },
+    },
+    "sqs list-queues": { stdout: { QueueUrls: [] } },
+    "s3api head-bucket": absent("NoSuchBucket"),
+    "secretsmanager list-secrets": { stdout: { SecretList: [] } },
+    "logs describe-log-groups": { stdout: { logGroups: [] } },
+    "cloudwatch describe-alarms": {
+      stdout: { MetricAlarms: [], CompositeAlarms: [] },
+    },
+    "servicediscovery list-namespaces": { stdout: { Namespaces: [] } },
+    "route53 list-hosted-zones-by-name": { stdout: { HostedZones: [] } },
+    "ec2 describe-vpcs": { stdout: { Vpcs: [] } },
+    "ec2 describe-network-interfaces": { stdout: { NetworkInterfaces: [] } },
+    "lambda get-function": absent("ResourceNotFoundException"),
+    "scheduler get-schedule": absent("ResourceNotFoundException"),
+    "iam get-role": absent("NoSuchEntity"),
+    "iam get-open-id-connect-provider": absent("NoSuchEntity"),
+    "ecr describe-repositories": absent("RepositoryNotFoundException"),
+    "budgets describe-budget": absent("NotFoundException"),
+  };
+  await writeFile(
+    path.join(directory, "closure-config.json"),
+    JSON.stringify(config),
+  );
+  return responses;
+}
+async function verifyFixture(
+  directory: string,
+  env: NodeJS.ProcessEnv,
+  responses: Record<string, any>,
+) {
+  await writeFile(
+    path.join(directory, "responses.json"),
+    JSON.stringify(responses),
+  );
+  const module = pathToFileURL(path.join(root, "scripts/aws-session.mjs")).href;
+  const script = `import{readFile}from'node:fs/promises';import{verifyClosure}from ${JSON.stringify(module)};try{console.log(JSON.stringify(await verifyClosure(JSON.parse(await readFile('closure-config.json','utf8')))))}catch(e){console.error(e.message);process.exitCode=1}`;
+  return spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+    cwd: directory,
+    env,
+    encoding: "utf8",
+  });
+}
+
+test(
+  "partial-inventory closure uses fresh STS identity instead of a missing or stale recorded account",
+  linux,
+  async () => {
+    for (const account of [undefined, "999900001111"]) {
+      await fixture(async (directory, env) => {
+        const responses = await closureFixture(directory, account);
+        const result = await verifyFixture(directory, env, responses);
+        assert.equal(result.status, 0, result.stderr);
+        const checks = JSON.parse(result.stdout);
+        assert.equal(Object.keys(checks).length, 12);
+        assert.equal(
+          Object.values(checks).every((x) => x === true),
+          true,
+        );
+      });
+    }
+  },
+);
+
+test(
+  "closure accepts observed RDS absence and successful empty SQS output without an operator supplement",
+  linux,
+  async () => {
+    await fixture(async (directory, env) => {
+      const responses = await closureFixture(directory, "111122223333");
+      responses["rds describe-db-instance-automated-backups"] = {
+        code: 254,
+        stderr:
+          "An error occurred (DBInstanceAutomatedBackupNotFound) when calling DescribeDBInstanceAutomatedBackups",
+      };
+      responses["sqs list-queues"] = { stdout: "" };
+      const result = await verifyFixture(directory, env, responses);
+      assert.equal(result.status, 0, result.stderr);
+      const checks = JSON.parse(result.stdout);
+      assert.equal(checks.database, true);
+      assert.equal(checks.queues, true);
+    });
+  },
+);
+
+test(
+  "leftover, paginated, malformed or denied queue results remain unverified",
+  linux,
+  async () => {
+    for (const response of [
+      {
+        stdout: {
+          QueueUrls: [
+            "https://sqs.ap-southeast-2.amazonaws.com/111122223333/p14-synthetic-source",
+          ],
+        },
+      },
+      { stdout: { QueueUrls: [], NextToken: "more" } },
+      { stdout: "{" },
+      { code: 254, stderr: "An error occurred (AccessDenied)" },
+    ]) {
+      await fixture(async (directory, env) => {
+        const responses = await closureFixture(directory, "111122223333");
+        responses["sqs list-queues"] = response;
+        const result = await verifyFixture(directory, env, responses);
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(JSON.parse(result.stdout).queues, false);
+      });
+    }
+  },
+);
+
+test(
+  "forged recorded account cannot certify closure under a different actual AWS identity",
+  linux,
+  async () => {
+    await fixture(async (directory, env) => {
+      const responses = await closureFixture(directory, "111122223333");
+      responses["sts get-caller-identity"].stdout.Account = "999900001111";
+      const result = await verifyFixture(directory, env, responses);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /account/);
+      const calls = (
+        await readFile(path.join(directory, "aws-calls.jsonl"), "utf8")
+      )
+        .trim()
+        .split("\n")
+        .map((x) => JSON.parse(x));
+      assert.deepEqual(
+        calls.map((x) => x.key),
+        ["sts get-caller-identity"],
+      );
+    });
   },
 );
