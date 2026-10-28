@@ -150,10 +150,12 @@ export async function transferCleanupArchive(action, options, run = command) {
 }
 const aws = (...args) =>
   command("aws", ["--no-cli-pager", "--region", "ap-southeast-2", ...args]);
+export function parseAwsJson(result) {
+  if (result.code !== 0 || result.timedOut) throw new Error("aws_read_failed");
+  return result.stdout.trim() ? JSON.parse(result.stdout) : {};
+}
 async function awsJson(...args) {
-  const r = await aws(...args, "--output", "json");
-  if (r.code !== 0) throw new Error("aws_read_failed");
-  return JSON.parse(r.stdout);
+  return parseAwsJson(await aws(...args, "--output", "json"));
 }
 async function identity(expected) {
   const actual = await awsJson("sts", "get-caller-identity");

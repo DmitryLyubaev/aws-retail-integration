@@ -3,6 +3,11 @@ export function responseIsAbsent(
   empty: (value: any) => boolean,
   allowEmptyOutput?: boolean,
 ): boolean;
+export function parseAwsJson(result: {
+  code: number | null;
+  stdout: string;
+  timedOut?: boolean;
+}): any;
 export function verifyClosure(config: any): Promise<Record<string, boolean>>;
 export function exportPrivateFailureEvidence(config: any): Promise<void>;
 export function supervisorBinding(config: any): boolean;
