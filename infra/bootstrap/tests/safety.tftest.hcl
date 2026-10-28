@@ -96,3 +96,33 @@ run "managed_password_key_metadata" {
     error_message = "The rendered delivery policy must remain within the IAM inline role policy size limit."
   }
 }
+
+run "provider_metadata_reads" {
+  command = plan
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_role_policy.delivery.policy).Statement :
+      contains(statement.Action, "ecs:DescribeTaskDefinition") &&
+      statement.Resource == "*" &&
+      try(statement.Condition.StringEquals["aws:RequestedRegion"] == "ap-southeast-2", false)
+    ])
+    error_message = "ECS task-definition reads have no resource-level authorization and must be limited to Sydney."
+  }
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_role_policy.delivery.policy).Statement :
+      contains(statement.Action, "rds:DescribeDBInstances") &&
+      statement.Resource == "arn:aws:rds:ap-southeast-2:111122223333:db:*" &&
+      try(statement.Condition.StringEquals["aws:RequestedRegion"] == "ap-southeast-2", false)
+    ])
+    error_message = "The provider's unfiltered RDS read needs db:* within only the approved account and region."
+  }
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_role_policy.delivery.policy).Statement :
+      contains(statement.Action, "s3:GetLifecycleConfiguration") &&
+      try(contains(statement.Resource, "arn:aws:s3:::p14-*"), false)
+    ])
+    error_message = "The provider reads bucket lifecycle metadata even when this demonstration defines no lifecycle rule."
+  }
+}
