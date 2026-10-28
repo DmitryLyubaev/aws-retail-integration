@@ -9,6 +9,7 @@ import {
   chmod,
 } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import { dirname } from "node:path";
 import {
   validateDispatch,
   validateDelivery,
@@ -95,6 +96,57 @@ export async function terraformOperation(
   if (result.timedOut) throw new Error("terraform_timeout");
   if (result.code !== 0) throw new Error("command_failed");
   return result.stdout;
+}
+export async function transferCleanupArchive(action, options, run = command) {
+  if (!["plan", "apply"].includes(action))
+    throw new Error("cleanup_archive_action");
+  const archiveFile = options.archiveFile ?? "build/cleanup.zip";
+  const rendered = await run("terraform", [
+    "-chdir=infra/session",
+    "show",
+    "-json",
+    options.planFile,
+  ]);
+  if (rendered.code !== 0 || rendered.timedOut)
+    throw new Error("cleanup_archive_plan");
+  const plan = JSON.parse(rendered.stdout);
+  const expected = plan.resource_changes?.find(
+    (r) => r.mode === "managed" && r.address === "aws_lambda_function.cleanup",
+  )?.change?.after?.source_code_hash;
+  if (typeof expected !== "string" || !/^[A-Za-z0-9+/]{43}=$/.test(expected))
+    throw new Error("cleanup_archive_plan");
+  const transfer = async (operation, args) => {
+    const result = await run("aws", [
+      "--no-cli-pager",
+      "--region",
+      "ap-southeast-2",
+      "--output",
+      "json",
+      "s3api",
+      operation,
+      "--bucket",
+      options.stateBucket,
+      "--key",
+      options.planKey + ".cleanup.zip",
+      ...args,
+    ]);
+    if (result.code !== 0 || result.timedOut)
+      throw new Error("cleanup_archive_transfer");
+  };
+  if (action === "apply") {
+    await mkdir(dirname(archiveFile), { recursive: true });
+    await transfer("get-object", [archiveFile]);
+  }
+  const bytes = await readFile(archiveFile);
+  if (createHash("sha256").update(bytes).digest("base64") !== expected)
+    throw new Error("cleanup_archive_digest");
+  if (action === "plan")
+    await transfer("put-object", [
+      "--body",
+      archiveFile,
+      "--server-side-encryption",
+      "AES256",
+    ]);
 }
 const aws = (...args) =>
   command("aws", ["--no-cli-pager", "--region", "ap-southeast-2", ...args]);
@@ -572,6 +624,11 @@ async function executePrepared(request, context) {
         ],
         ".local/logs/terraform-plan.log",
       );
+      await transferCleanupArchive("plan", {
+        stateBucket,
+        planKey,
+        planFile: "../../.local/plan.bin",
+      });
       const digest = sha(await readFile(".local/plan.bin"));
       const receipt = {
         sourceCommit: request.sourceCommit,
@@ -609,6 +666,11 @@ async function executePrepared(request, context) {
       }
     },
     async apply() {
+      await transferCleanupArchive("apply", {
+        stateBucket,
+        planKey,
+        planFile: "../../.local/plan.bin",
+      });
       const readyObject = await aws(
         "s3api",
         "get-object",

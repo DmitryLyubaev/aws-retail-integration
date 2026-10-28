@@ -21,6 +21,16 @@ export function command(
   stderr: string;
   timedOut?: boolean;
 }>;
+export function transferCleanupArchive(
+  action: "plan" | "apply",
+  options: {
+    stateBucket: string;
+    planKey: string;
+    planFile: string;
+    archiveFile?: string;
+  },
+  run?: typeof command,
+): Promise<void>;
 export function terraformOperation(
   context: any,
   operation: string,

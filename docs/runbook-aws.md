@@ -155,8 +155,15 @@ requests owned RDS deletion. Scheduler delivery age is one hour; Lambda async ag
 is 900 seconds with two retries. Neither fallback claims full teardown.
 
 Dispatch action `apply` only after reviewing that exact saved plan, supplying its
-key/hash and explicit reviewed-plan flag. No replacement plan is generated. Migration
-and seed run as one-off owner tasks with recorded exit codes. Failure prevents
+key/hash and explicit reviewed-plan flag. No replacement plan is generated.
+The plan job also retains its generated cleanup ZIP as the private object
+`PLAN_KEY.cleanup.zip`. A fresh apply job downloads that exact ZIP and verifies
+its SHA256 against the Lambda `source_code_hash` inside the approved saved plan
+before checking the fresh supervisor heartbeat. Rebuilding only the JavaScript
+bundle does not recreate a plan-time archive; missing or changed ZIP bytes refuse
+apply. The existing plan hash binds this artifact without a replacement plan.
+
+Migration and seed run as one-off owner tasks with recorded exit codes. Failure prevents
 service start; compute is stopped while evidence remains available. Success enables
 exactly one application and one worker. Counts cannot be restarted after cleanup
 has begun. The independent supervisor remains active through failed stages.
