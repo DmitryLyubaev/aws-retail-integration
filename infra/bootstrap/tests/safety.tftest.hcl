@@ -126,3 +126,16 @@ run "provider_metadata_reads" {
     error_message = "The provider reads lifecycle and replication metadata even when this demonstration defines neither feature."
   }
 }
+
+run "hosted_task_definition_destruction" {
+  command = plan
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_role_policy.delivery.policy).Statement :
+      contains(statement.Action, "ecs:DeregisterTaskDefinition") &&
+      statement.Resource == "*" &&
+      try(statement.Condition.StringEquals["aws:RequestedRegion"] == "ap-southeast-2", false)
+    ])
+    error_message = "Hosted Terraform destruction needs ECS's API-supported wildcard deregistration scope, restricted to Sydney."
+  }
+}

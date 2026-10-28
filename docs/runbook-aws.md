@@ -156,6 +156,12 @@ is 900 seconds with two retries. Neither fallback claims full teardown.
 
 Dispatch action `apply` only after reviewing that exact saved plan, supplying its
 key/hash and explicit reviewed-plan flag. No replacement plan is generated.
+The delivery role permits ECS task-definition reads and deregistration using the
+API-required `Resource: *`, limited to Sydney. The protected source/request guards
+still select the owned session; IAM cannot restrict those two APIs by task-family
+ARN. RDS provider reads use only the approved account/Sydney database metadata,
+and S3 lifecycle/replication reads use the existing project bucket scope.
+
 The plan job also retains its generated cleanup ZIP as the private object
 `PLAN_KEY.cleanup.zip`. A fresh apply job downloads that exact ZIP and verifies
 its SHA256 against the Lambda `source_code_hash` inside the approved saved plan
