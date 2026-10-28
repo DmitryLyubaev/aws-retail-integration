@@ -32,6 +32,22 @@ the owner to approve those concrete actions and their costed saved plans first.
    Resolve every identity to the same personal account. Do not import a shared
    GitHub OIDC provider or shared project resources into this disposable bootstrap.
 
+Before preparing bootstrap inputs, read the repository's actual OIDC subject
+format and immutable IDs:
+
+```sh
+gh api repos/DmitryLyubaev/aws-retail-integration/actions/oidc/customization/sub
+gh api repos/DmitryLyubaev/aws-retail-integration --jq '{repository: .full_name, github_owner_id: (.owner.id | tostring), github_repository_id: (.id | tostring)}'
+```
+
+Set `github_owner_id` and `github_repository_id` in the private bootstrap
+configuration from that verified response. Confirm `use_immutable_subject` is
+true and `sub_claim_prefix` matches
+`repo:OWNER@OWNER_ID/aws-retail-integration@REPOSITORY_ID`. The trust policy adds
+`:environment:aws-demo` and keeps the exact `sts.amazonaws.com` audience. New
+repositories use this immutable format; do not disable it to match a legacy
+name-only trust. These IDs are public GitHub metadata, not AWS credentials.
+
 The dated [cost model](cost-model.md) reserves approximately USD1.04 base, USD5
 planning allowance and USD10 operating limit before tax, without credit offsets.
 Reprice the actual saved plan. No NAT, ALB, interface endpoints, extra database,

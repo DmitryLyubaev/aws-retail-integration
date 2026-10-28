@@ -52,12 +52,13 @@ resource "aws_iam_openid_connect_provider" "github" {
 resource "aws_iam_role" "delivery" {
   name                 = "p14-delivery"
   max_session_duration = 3600
-  assume_role_policy   = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { Federated = "arn:aws:iam::${var.account_id}:oidc-provider/token.actions.githubusercontent.com" }, Action = "sts:AssumeRoleWithWebIdentity", Condition = { StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com", "token.actions.githubusercontent.com:sub" = "repo:${var.repository}:environment:aws-demo" } } }] })
+  assume_role_policy   = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { Federated = "arn:aws:iam::${var.account_id}:oidc-provider/token.actions.githubusercontent.com" }, Action = "sts:AssumeRoleWithWebIdentity", Condition = { StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com", "token.actions.githubusercontent.com:sub" = local.github_subject } } }] })
   depends_on           = [aws_iam_openid_connect_provider.github]
 }
 locals {
-  prefix   = "arn:aws"
-  regional = "${var.region}:${var.account_id}"
+  prefix         = "arn:aws"
+  regional       = "${var.region}:${var.account_id}"
+  github_subject = "repo:${split("/", var.repository)[0]}@${var.github_owner_id}/${split("/", var.repository)[1]}@${var.github_repository_id}:environment:aws-demo"
 }
 resource "aws_iam_role_policy" "delivery" {
   role = aws_iam_role.delivery.id

@@ -20,6 +20,20 @@ variable "repository" {
     error_message = "An approved exact repository is required."
   }
 }
+variable "github_owner_id" {
+  type = string
+  validation {
+    condition     = can(regex("^[1-9][0-9]*$", var.github_owner_id))
+    error_message = "Use the verified immutable GitHub owner ID."
+  }
+}
+variable "github_repository_id" {
+  type = string
+  validation {
+    condition     = can(regex("^[1-9][0-9]*$", var.github_repository_id))
+    error_message = "Use the verified immutable GitHub repository ID."
+  }
+}
 variable "state_bucket" {
   type = string
   validation {
