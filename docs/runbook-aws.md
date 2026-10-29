@@ -236,6 +236,14 @@ other private evidence before preparing any redacted publication.
 
 ## Teardown and closure
 
+Owner recovery retains the existing partial-apply fallback when its inventory
+file is unavailable: it trusts the verified account, hash-bound configuration
+and Terraform state. Present foreign inventory is rejected. This is not a
+universal missing-inventory rejection guarantee. Expired sessions may still need
+owned cleanup; backup emptying precedes the Terraform deadline gate, so the
+deadline is not a promise that every destructive AWS call is blocked afterward.
+Report overdue recovery explicitly and keep the original clock unchanged.
+
 Begin at hour four even when acceptance fails. After the application window
 expires, the protected **Owned AWS session destruction** workflow and independent
 owner supervisor remain available within the six-hour closure envelope. Lifecycle
